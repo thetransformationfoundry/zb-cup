@@ -1186,7 +1186,7 @@
     subScreen = subBugReports;
     const wrap = h(`<div class="screen"></div>`);
     wrap.appendChild(backHeader("Bug reports"));
-    const listWrap = h(`<div id="bugs"><div class="muted center" style="padding:30px">Loading…</div></div>`);
+    const listWrap = h(`<div id="bugs"></div>`);
     wrap.appendChild(listWrap);
     setView(wrap);
     const draw = () => {
@@ -1205,6 +1205,9 @@
         listWrap.appendChild(c);
       });
     };
+    // show what's cached now (Loading only if we have nothing), then refresh in the background
+    if (S.bugReports && S.bugReports().length) draw();
+    else listWrap.innerHTML = `<div class="muted center" style="padding:30px">Loading…</div>`;
     if (S.bugReportsLoad) S.bugReportsLoad().then(draw); else draw();
   }
 

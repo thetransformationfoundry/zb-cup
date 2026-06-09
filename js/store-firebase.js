@@ -413,9 +413,9 @@
       Object.values(cache.users).filter(x => x.isAdmin && x.id !== u.id).forEach(a => notify(a.id, "bug", `${u.name} reported a bug 🐞`));
       return { ok: true };
     },
-    bugReportsLoad() { // admin: fetch on demand (non-admins can't read these)
+    bugReportsLoad() { // admin: fetch on demand (non-admins can't read these). NO refresh() — avoids a render loop.
       return db.collection("bugReports").orderBy("createdAt", "desc").get()
-        .then(s => { cache.bugReports = s.docs.map(d => Object.assign({ id: d.id }, d.data())); refresh(); })
+        .then(s => { cache.bugReports = s.docs.map(d => Object.assign({ id: d.id }, d.data())); })
         .catch(() => {});
     },
     bugReports() { return cache.bugReports || []; },
