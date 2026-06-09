@@ -248,7 +248,7 @@
       s.posts.push({ id: uid(), authorId: me.id, authorName: me.name,
         authorPhoto: me.photoURL, text: text || "", imageURL: imageURL || null, goals: 0, goaledBy: [], createdAt: now(), replies: [] });
       let bonus = 0;
-      if (imageURL) { bonus = 50; me.points = (me.points || 0) + 50; me.lastPhotoBonus = todayKey(); }
+      if (imageURL) { bonus = 10; me.points = (me.points || 0) + 10; me.lastPhotoBonus = todayKey(); }
       save();
       return { ok: true, bonus };
     },
@@ -287,7 +287,7 @@
     deletePost(postId) {
       const s = get(); const p = s.posts.find(x => x.id === postId);
       if (p && p.imageURL && p.authorId) {
-        const a = s.users[p.authorId]; if (a) { a.points = Math.max(0, (a.points || 0) - 50); a.lastPhotoBonus = ""; }
+        const a = s.users[p.authorId]; if (a) { a.points = Math.max(0, (a.points || 0) - 10); a.lastPhotoBonus = ""; }
       }
       s.posts = s.posts.filter(x => x.id !== postId); save();
     },
@@ -377,7 +377,7 @@
       const s = get();
       s.tournament.winnerCountryCode = code;
       Object.values(s.users).forEach(u => {
-        if (u.country && u.country.code === code) u.points += 100;
+        if (u.country && u.country.code === code) u.points += 2500;
       });
       save();
     },

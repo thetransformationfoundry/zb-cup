@@ -391,7 +391,7 @@
     const v = h(`<div class="onb">
       <div class="grow">
         <h2>Pick your country</h2>
-        <p class="sub">Support a nation in the World Cup. If they win it all, you earn <b>100 points</b> — but once you pick, it's locked. Choose wisely!</p>
+        <p class="sub">Support a nation in the World Cup. If they win it all, you earn a massive <b>2,500 points</b> — but once you pick, it's locked. Choose wisely!</p>
         <input class="input" id="o-search" placeholder="Search countries…" style="margin-bottom:14px">
         <div class="team-grid" id="o-teams"></div>
       </div>
@@ -414,7 +414,7 @@
   function confirmCountry(team) {
     const bg = modal(`
       <h3>Lock in ${esc(team.name)}?</h3>
-      <p>${flag(team, "lg")}<br><br>Your country is <b>locked in</b> for the whole tournament. If ${esc(team.name)} win the World Cup you get <b>100 points</b> — but you can't change it later.</p>
+      <p>${flag(team, "lg")}<br><br>Your country is <b>locked in</b> for the whole tournament. If ${esc(team.name)} win the World Cup you get <b>2,500 points</b> — but you can't change it later.</p>
       <div class="actions">
         <button class="btn secondary" id="c-cancel">Not yet</button>
         <button class="btn" id="c-ok">Lock it in</button>
@@ -842,7 +842,7 @@
   /* ---------------- CHAT ---------------- */
   function viewChat() {
     const me = S.currentUser();
-    const wrap = h(`<div class="screen" style="padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px) + 96px)"><h2>Chat</h2><p class="sub">Say hi, share predictions, post a celebration photo (+50 pts, once a day!), and give "Goals" ⚽ to cheer colleagues on.</p><div id="feed"></div></div>`);
+    const wrap = h(`<div class="screen" style="padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px) + 96px)"><h2>Chat</h2><p class="sub">Say hi, share predictions, post a celebration photo (+10 pts, once a day!), and give "Goals" ⚽ to cheer colleagues on.</p><div id="feed"></div></div>`);
     const feed = wrap.querySelector("#feed");
     // pinned admin announcement
     const ann = S.announcement ? S.announcement() : null;
@@ -956,7 +956,7 @@
       const inp = comp.querySelector("#c-in"); const t = inp.value.trim();
       if (!t && !pendingChatPhoto) return;
       const r = S.addPost(t, pendingChatPhoto); if (r && r.error) return toast(r.error);
-      if (r && r.bonus) { celebrate(); toast("Nice photo! +50 pts 🎉"); }
+      if (r && r.bonus) { celebrate(); toast("Nice photo! +10 pts 🎉"); }
       inp.value = ""; pendingChatPhoto = null; viewChat();
       setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 60);
     };
@@ -1074,15 +1074,15 @@
     return `
       <div class="section-title" style="margin-top:0">Getting in</div>
       <p>Create an account with your <b>work email and a password</b> (tap "Forgot password?" any time to reset it). Add a profile photo, set your fun facts, and pick a country. Your account works on any device — just sign in.</p>
-      <div class="section-title">Your country (100 pts)</div>
-      <p>Pick one nation. <b>It locks immediately</b> and can't be changed. If they win the whole World Cup, you score <b>100 points</b>.</p>
+      <div class="section-title">Your country (2,500 pts)</div>
+      <p>Pick one nation. <b>It locks immediately</b> and can't be changed. If they win the whole World Cup, you score a huge <b>2,500 points</b>!</p>
       <div class="section-title">Match predictions (up to 10 pts/game)</div>
       <p>For each game predict the <b>winner</b> (+5) and the <b>exact score</b> (+5). Predictions <b>lock at kickoff</b> — get them in early!</p>
       <div class="section-title">Fun facts (20 pts each)</div>
       <p>Set 3 multiple-choice facts about yourself (they <b>lock</b> once saved). Guess colleagues' facts for <b>20 points</b> each. Each time someone guesses one of <b>your</b> facts, you earn a 👑. You get <b>3 wrong guesses per day</b> — keep going while you're right; 3 wrong and you're done until tomorrow.</p>
-      <div class="section-title">📸 Celebration photos (+50 pts)</div>
-      <p>Post a photo in Chat to earn <b>+50 points — once per day</b>. Use the 📷 in the message box.</p>
-      <p style="background:#FBEBEB;color:var(--bad);border-radius:10px;padding:10px 12px;font-size:14px"><b>Please keep it relevant:</b> photos should celebrate colleagues or the football. Off-topic or inappropriate photos will be <b>removed by the admin and the 50 points taken back</b>. Keep it fun and professional. 🙏</p>
+      <div class="section-title">📸 Celebration photos (+10 pts)</div>
+      <p>Post a photo in Chat to earn <b>+10 points — once per day</b>. Use the 📷 in the message box.</p>
+      <p style="background:#FBEBEB;color:var(--bad);border-radius:10px;padding:10px 12px;font-size:14px"><b>Please keep it relevant:</b> photos should celebrate colleagues or the football. Off-topic or inappropriate photos will be <b>removed by the admin and the 10 points taken back</b>. Keep it fun and professional. 🙏</p>
       <div class="section-title">Leaderboard</div>
       <p>All your points add up here, live. 👑 shows how many times colleagues have guessed your facts.</p>
       <div class="section-title">Chat & Goals</div>
@@ -1257,7 +1257,7 @@
     const curAnn = S.announcement ? S.announcement() : null;
     const secAnn = h(`<div class="card"><div class="section-title" style="margin-top:0">📢 Pinned announcement</div>
       <p class="muted" style="font-size:13px;margin:0 0 8px">Pins a highlighted message to the top of Chat and pings everyone's bell. Great for updates &amp; new features.</p>
-      <textarea class="input" id="ann" placeholder="e.g. New feature: you can now post photos for +50 pts!" style="min-height:70px">${curAnn ? esc(curAnn.text) : ""}</textarea>
+      <textarea class="input" id="ann" placeholder="e.g. New feature: you can now post photos for +10 pts!" style="min-height:70px">${curAnn ? esc(curAnn.text) : ""}</textarea>
       <button class="btn" id="ann-pin" style="margin-top:10px">${curAnn ? "Update announcement" : "Pin announcement"}</button>
       ${curAnn ? `<button class="btn ghost danger" id="ann-rm" style="margin-top:4px">Remove announcement</button>` : ""}</div>`);
     secAnn.querySelector("#ann-pin").onclick = () => {
@@ -1293,17 +1293,17 @@
 
     /* E — Tournament winner */
     const t = S.tournament();
-    const secE = h(`<div class="card"><div class="section-title" style="margin-top:0">Tournament winner (awards 100 pts)</div>
+    const secE = h(`<div class="card"><div class="section-title" style="margin-top:0">Tournament winner (awards 2,500 pts)</div>
       <select class="input" id="win"><option value="">— pick winning country —</option>
       ${window.ZB_TEAMS.map(tm => `<option value="${tm.code}" ${t.winnerCountryCode === tm.code ? "selected" : ""}>${esc(tm.name)}</option>`).join("")}</select>
-      <button class="btn" id="setwin" style="margin-top:12px">Award 100 pts to supporters</button></div>`);
+      <button class="btn" id="setwin" style="margin-top:12px">Award 2,500 pts to supporters</button></div>`);
     secE.querySelector("#setwin").onclick = () => {
       const c = secE.querySelector("#win").value; if (!c) return toast("Pick a country");
       const tm = window.ZB_TEAM_BY_CODE[c];
-      const bg = modal(`<h3>Confirm winner: ${esc(tm.name)}?</h3><p>Every supporter of ${esc(tm.name)} gets +100 points.</p>
+      const bg = modal(`<h3>Confirm winner: ${esc(tm.name)}?</h3><p>Every supporter of ${esc(tm.name)} gets +2,500 points.</p>
         <div class="actions"><button class="btn secondary" id="x">Cancel</button><button class="btn" id="ok">Confirm</button></div>`);
       bg.querySelector("#x").onclick = () => bg.remove();
-      bg.querySelector("#ok").onclick = () => { S.setTournamentWinner(c); bg.remove(); toast("100 pts awarded ✓"); renderApp(); };
+      bg.querySelector("#ok").onclick = () => { S.setTournamentWinner(c); bg.remove(); toast("2,500 pts awarded ✓"); renderApp(); };
     };
     wrap.appendChild(secE);
 

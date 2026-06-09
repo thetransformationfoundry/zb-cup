@@ -127,15 +127,15 @@
       if (user) {
         cache.uid = user.uid; cache.authEmail = user.email; cache.authed = true;
         attachListeners();
+        // load the profile BEFORE rendering, so returning users don't flash the name screen
         db.collection("users").doc(user.uid).get()
           .then(d => { if (d && d.exists) cache.users[user.uid] = Object.assign({ id: d.id }, d.data()); })
           .catch(() => {})
-          .then(() => resolve());
+          .then(() => { ensureAdmin(); resolve(); refresh(); });
       } else {
         cache.uid = null; cache.authEmail = null; cache.authed = false;
-        resolve();
+        resolve(); refresh();
       }
-      refresh();
     });
     setTimeout(resolve, 6000); // safety net
   });
@@ -303,9 +303,9 @@
       const p = { authorId: u.id, authorName: u.name, authorPhoto: u.photoURL || null, text: text || "", imageURL: imageURL || null, goals: 0, goaledBy: [], replies: [], createdAt: now() };
       db.collection("posts").add(p);
       let bonus = 0;
-      if (imageURL) { // one photo/day → always the +50 bonus
-        bonus = 50; u.points = (u.points || 0) + 50; u.lastPhotoBonus = todayKey();
-        db.collection("users").doc(u.id).update({ points: FV.increment(50), lastPhotoBonus: todayKey() });
+      if (imageURL) { // one photo/day → always the +10 bonus
+        bonus = 10; u.points = (u.points || 0) + 10; u.lastPhotoBonus = todayKey();
+        db.collection("users").doc(u.id).update({ points: FV.increment(10), lastPhotoBonus: todayKey() });
       }
       refresh();
       return { ok: true, bonus };
@@ -324,8 +324,8 @@
       db.collection("posts").doc(postId).delete();
       // deleting a photo post claws back the +50 bonus (anti-farming + admin moderation)
       if (p && p.imageURL && p.authorId) {
-        const a = cache.users[p.authorId]; if (a) a.points = Math.max(0, (a.points || 0) - 50);
-        db.collection("users").doc(p.authorId).update({ points: FV.increment(-50), lastPhotoBonus: "" });
+        const a = cache.users[p.authorId]; if (a) a.points = Math.max(0, (a.points || 0) - 10);
+        db.collection("users").doc(p.authorId).update({ points: FV.increment(-10), lastPhotoBonus: "" });
         refresh();
       }
     },
@@ -441,7 +441,7 @@
       db.doc("tournament/meta").set({ winnerCountryCode: code, name: window.ZB_CONFIG.tournamentName || "World Cup" }, { merge: true });
       db.collection("users").where("country.code", "==", code).get().then(snap => {
         const batch = db.batch();
-        snap.forEach(d => batch.update(d.ref, { points: FV.increment(100) }));
+        snap.forEach(d => batch.update(d.ref, { points: FV.increment(2500) }));
         batch.commit();
       });
     },
