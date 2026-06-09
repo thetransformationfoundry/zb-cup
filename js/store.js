@@ -116,7 +116,11 @@
 
     /* --- current user / auth --- */
     currentUser() { const s = get(); return s.currentUserId ? s.users[s.currentUserId] : null; },
-    isAdmin() { const u = this.currentUser(); return !!(u && u.isAdmin); },
+    isAdmin() {
+      const u = this.currentUser(); if (!u) return false;
+      const admins = (window.ZB_CONFIG.ADMIN_EMAILS || []).map(e => e.toLowerCase());
+      return !!(u.isAdmin || admins.includes((u.email || "").toLowerCase()));
+    },
     signUp({ name, email, photoURL }) {
       const s = get();
       const adminEmails = (window.ZB_CONFIG.ADMIN_EMAILS || []).map(e => e.toLowerCase());
