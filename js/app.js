@@ -150,71 +150,58 @@
 
   function onbEmail() {
     root.innerHTML = "";
-    let mode = "signin"; // "signin" | "signup"
     const v = h(`<div class="onb">
       <svg class="hero-logo"></svg>
       <div class="grow">
         <h2>Welcome to ZB Cup</h2>
-        <p class="sub">Play along with the 2026 World Cup with your ZB colleagues. Sign in with your work email — or create an account if it's your first time.</p>
-        <div class="seg" id="o-seg" style="margin-bottom:14px">
-          <button data-m="signin">Sign in</button>
-          <button data-m="signup">Create account</button>
-        </div>
+        <p class="sub">Play along with the 2026 World Cup with your ZB colleagues. <b>New here?</b> Create an account. <b>Already joined?</b> Sign in.</p>
         <label class="fld">Work email</label>
         <input class="input" id="o-email" type="email" inputmode="email" placeholder="you@zimmerbiomet.com" autocomplete="email">
         <label class="fld">Password</label>
-        <input class="input" id="o-pass" type="password" placeholder="Your password" autocomplete="current-password">
+        <input class="input" id="o-pass" type="password" placeholder="At least 6 characters" autocomplete="current-password">
         <button class="btn ghost" id="o-forgot" style="width:auto;padding:8px 0;margin-top:4px;font-size:14px">Forgot password?</button>
       </div>
       <div>
-        <button class="btn" id="o-go">Sign in</button>
+        <button class="btn" id="o-signup" style="background:#141414">Create account</button>
+        <button class="btn secondary" id="o-signin" style="margin-top:8px">Sign in</button>
         <div class="center" style="margin-top:10px"><button class="chip" id="o-rules" style="cursor:pointer;font-size:13px;padding:7px 14px">📖 How to play</button></div>
       </div>
     </div>`);
     v.querySelector(".hero-logo").outerHTML = logoSVG("hero-logo");
     root.appendChild(v);
-    const segBtns = root.querySelectorAll("#o-seg button");
-    const goBtn = root.querySelector("#o-go");
-    const passInput = root.querySelector("#o-pass");
-    const forgot = root.querySelector("#o-forgot");
-    const setMode = (m) => {
-      mode = m;
-      segBtns.forEach(b => b.classList.toggle("active", b.dataset.m === m));
-      goBtn.disabled = false;
-      goBtn.textContent = m === "signin" ? "Sign in" : "Create account";
-      passInput.placeholder = m === "signin" ? "Your password" : "Create a password (6+ characters)";
-      passInput.setAttribute("autocomplete", m === "signin" ? "current-password" : "new-password");
-      forgot.style.display = m === "signin" ? "" : "none";
-    };
-    setMode("signin");
-    segBtns.forEach(b => b.onclick = () => setMode(b.dataset.m));
+    const signupBtn = root.querySelector("#o-signup");
+    const signinBtn = root.querySelector("#o-signin");
     root.querySelector("#o-rules").onclick = showRulesModal;
-    forgot.onclick = () => {
+    root.querySelector("#o-forgot").onclick = () => {
       const email = root.querySelector("#o-email").value.trim();
       if (!/^\S+@\S+\.\S+$/.test(email)) return toast("Type your email above first, then tap Forgot password");
       S.resetPassword(email).then(() => toast("Password reset email sent — check your inbox"))
         .catch(() => toast("Couldn't send a reset email — check the address"));
     };
-    goBtn.onclick = () => {
+    const run = (mode) => {
       const email = root.querySelector("#o-email").value.trim();
-      const pass = passInput.value;
+      const pass = root.querySelector("#o-pass").value;
       if (!/^\S+@\S+\.\S+$/.test(email)) return toast("Please enter a valid email");
       if (pass.length < 6) return toast("Password must be at least 6 characters");
-      goBtn.disabled = true; goBtn.textContent = "Please wait…";
+      signupBtn.disabled = signinBtn.disabled = true;
+      const busy = mode === "signin" ? signinBtn : signupBtn;
+      const label = busy.textContent; busy.textContent = "Please wait…";
       const action = mode === "signin" ? S.signInEmail(email, pass) : S.createEmail(email, pass);
       const finish = () => { onb = null; render(); };
       action
         .then(() => (S.reloadMe ? S.reloadMe().then(finish) : finish()))
         .catch(err => {
-          setMode(mode);
+          signupBtn.disabled = signinBtn.disabled = false; busy.textContent = label;
           const code = (err && err.code) || "";
-          if (code === "auth/email-already-in-use") toast("That email already has an account — switch to Sign in.");
+          if (code === "auth/email-already-in-use") toast("That email already has an account — tap Sign in instead.");
           else if (["auth/invalid-credential", "auth/wrong-password", "auth/user-not-found"].includes(code)) toast("Wrong email or password. New here? Tap Create account.");
           else if (code === "auth/weak-password") toast("Password too weak — use at least 6 characters.");
           else if (code === "auth/invalid-email") toast("That email doesn't look right.");
           else { console.error(err); toast("Couldn't sign in — please try again."); }
         });
     };
+    signupBtn.onclick = () => run("signup");
+    signinBtn.onclick = () => run("signin");
   }
 
   function onbName() {
@@ -645,7 +632,7 @@
       wrap.appendChild(h(`<div class="card tight row" style="margin-bottom:18px;gap:10px"><span class="chip good">🔒 Locked</span><span class="muted" style="font-size:13px">Your 3 fun facts are set. View them in Settings.</span></div>`));
     } else {
       const setupBtn = h(`<button class="btn" style="margin-bottom:18px">${myFacts.length ? "Finish setting my fun facts" : "Set up my 3 fun facts"}</button>`);
-      setupBtn.onclick = setupFacts;
+      setupBtn.onclick = () => setupFacts(viewFacts);
       wrap.appendChild(setupBtn);
     }
 
@@ -664,7 +651,7 @@
     setView(wrap);
   }
 
-  function setupFacts() {
+  function setupFacts(after) {
     const me = S.currentUser();
     const existing = S.factsFor(me.id);
     const bg = modal(`<h3>Your 3 fun facts</h3>${factsIntro()}
@@ -696,7 +683,7 @@
         facts.push({ question: q, options: opts, answerIndex: ans });
       }
       const r = S.setMyFacts(facts); if (r && r.error) return toast(r.error);
-      bg.remove(); toast("Fun facts saved & locked in ✓"); viewFacts();
+      bg.remove(); toast("Fun facts saved & locked in ✓"); (after || viewFacts)();
     };
   }
 
@@ -765,7 +752,7 @@
   /* ---------------- CHAT ---------------- */
   function viewChat() {
     const me = S.currentUser();
-    const wrap = h(`<div class="screen" style="padding-bottom:120px"><h2>Chat</h2><p class="sub">Say hi, talk trash, and give "Goals" ⚽ for kudos.</p><div id="feed"></div></div>`);
+    const wrap = h(`<div class="screen" style="padding-bottom:120px"><h2>Chat</h2><p class="sub">Say hi, share your predictions, and give "Goals" ⚽ to cheer colleagues on.</p><div id="feed"></div></div>`);
     const feed = wrap.querySelector("#feed");
     const blockedIds = new Set(S.allUsers().filter(u => u.blocked).map(u => u.id));
     const posts = S.posts().filter(p => !blockedIds.has(p.authorId)); // hide blocked users' posts
@@ -997,23 +984,28 @@
     </div>`);
     wrap.appendChild(card);
 
-    // Read-only view of the user's own fun facts
+    // My fun facts — read-only when locked; otherwise let them set/finish right here
     const facts = S.factsFor(me.id);
-    if (facts.length) {
-      const locked = S.factsLocked(me.id);
-      const fc = h(`<div class="card">
-        <div class="row between" style="margin-bottom:6px">
-          <div class="section-title" style="margin-top:0">My fun facts</div>
-          ${locked ? `<span class="chip good">🔒 Locked</span>` : ""}
-        </div>
-        <p class="muted" style="font-size:13px;margin:0 0 6px">${locked ? "These can't be changed — they're what colleagues guess about you." : `You've set ${facts.length} of 3. Finish them in the Fun Facts tab to lock them in.`}</p>
-      </div>`);
-      facts.forEach((f, i) => fc.appendChild(h(`<div style="padding:10px 0;border-top:1px solid var(--line)">
-        <div style="font-weight:600;font-size:14px">${i + 1}. ${esc(f.question)}</div>
-        <div class="muted" style="font-size:13px;margin-top:2px">Correct answer: <b style="color:var(--good)">${esc(f.options[f.answerIndex])}</b></div>
-      </div>`)));
-      wrap.appendChild(fc);
+    const locked = S.factsLocked(me.id);
+    const fc = h(`<div class="card">
+      <div class="row between" style="margin-bottom:6px">
+        <div class="section-title" style="margin-top:0">My fun facts</div>
+        ${locked ? `<span class="chip good">🔒 Locked</span>` : ""}
+      </div>
+      <p class="muted" style="font-size:13px;margin:0 0 6px">${locked
+        ? "These can't be changed — they're what colleagues guess about you."
+        : "Set 3 fun facts so colleagues can guess them (you earn a 👑 each time). They lock once all 3 are saved."}</p>
+    </div>`);
+    facts.forEach((f, i) => fc.appendChild(h(`<div style="padding:10px 0;border-top:1px solid var(--line)">
+      <div style="font-weight:600;font-size:14px">${i + 1}. ${esc(f.question)}</div>
+      <div class="muted" style="font-size:13px;margin-top:2px">Correct answer: <b style="color:var(--good)">${esc(f.options[f.answerIndex])}</b></div>
+    </div>`)));
+    if (!locked) {
+      const b = h(`<button class="btn" style="margin-top:14px">${facts.length ? "Finish my fun facts" : "Set up my fun facts"}</button>`);
+      b.onclick = () => setupFacts(subSettings);
+      fc.appendChild(b);
     }
+    wrap.appendChild(fc);
 
     setView(wrap);
     card.querySelector("#s-photo").onclick = () => card.querySelector("#s-file").click();

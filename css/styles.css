@@ -235,7 +235,8 @@ textarea.input { resize: vertical; min-height: 80px; }
 .modal-bg { position: fixed; inset: 0; background: rgba(20,28,38,.45); z-index: 50;
   display: flex; align-items: flex-end; justify-content: center; animation: fade .2s; }
 .modal { background: #fff; border-radius: 22px 22px 0 0; width: 100%; max-width: 480px;
-  padding: 22px 22px calc(env(safe-area-inset-bottom,0) + 22px); box-shadow: var(--shadow-lg); animation: up .26s ease; }
+  max-height: 90vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 22px 22px calc(env(safe-area-inset-bottom,0px) + 22px); box-shadow: var(--shadow-lg); animation: up .26s ease; }
 @keyframes up { from { transform: translateY(40px); opacity: .6; } to { transform: none; opacity: 1; } }
 .modal h3 { margin: 0 0 8px; font-size: 19px; }
 .modal p { color: var(--muted); margin: 0 0 18px; }
