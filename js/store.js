@@ -103,6 +103,7 @@
   /* ----------------------------- API ----------------------------- */
   const Store = {
     todayKey, uid, now,
+    emailLogin: false,   // demo mode uses the simple name+email onboarding
 
     /* --- current user / auth --- */
     currentUser() { const s = get(); return s.currentUserId ? s.users[s.currentUserId] : null; },

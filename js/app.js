@@ -111,8 +111,22 @@
   ===================================================== */
   function render() {
     const u = S.currentUser();
-    if (!u) { onb = onb || { step: "identity" }; return renderOnboarding(); }
-    if (!u.country) { onb = onb || { step: "photo" }; return renderOnboarding(); }
+    // 1) Live email mode, not signed in yet → email magic-link step
+    if (S.emailLogin && !S.authed()) { onb = { step: "email" }; return renderOnboarding(); }
+    // 2) Signed in (or demo) but no profile → name/identity → photo → facts → country
+    if (!u) {
+      const first = S.emailLogin ? "name" : "identity";
+      const valid = ["name", "identity", "photo", "facts", "country"];
+      if (!onb || !valid.includes(onb.step)) onb = { step: first };
+      return renderOnboarding();
+    }
+    // 3) Profile exists but country not locked → continue onboarding
+    if (!u.country) {
+      const valid = ["photo", "facts", "country"];
+      if (!onb || !valid.includes(onb.step)) onb = { step: "photo" };
+      return renderOnboarding();
+    }
+    // 4) Fully onboarded
     renderApp();
   }
 
@@ -120,16 +134,74 @@
      ONBOARDING
   ===================================================== */
   function dots(active) {
-    const order = ["identity", "photo", "facts", "country"];
+    const order = S.emailLogin ? ["name", "photo", "facts", "country"] : ["identity", "photo", "facts", "country"];
     return `<div class="dots">${order.map(s => `<i class="${s === active ? "on" : ""}"></i>`).join("")}</div>`;
   }
 
   function renderOnboarding() {
     const step = onb.step;
+    if (step === "email") return onbEmail();
     if (step === "identity") return onbIdentity();
+    if (step === "name") return onbName();
     if (step === "photo") return onbPhoto();
     if (step === "facts") return onbFacts();
     if (step === "country") return onbCountry();
+  }
+
+  function onbEmail() {
+    root.innerHTML = "";
+    const v = h(`<div class="onb">
+      <svg class="hero-logo"></svg>
+      <div class="grow">
+        <h2>Welcome to ZB Cup</h2>
+        <p class="sub">Play along with the 2026 World Cup with your ZB colleagues. Pop in your work email and we'll send you a one-tap sign-in link — no password to remember.</p>
+        <label class="fld">Work email</label>
+        <input class="input" id="o-email" type="email" inputmode="email" placeholder="you@zimmerbiomet.com" autocomplete="email">
+        <div id="o-msg" style="font-size:13px;margin-top:12px"></div>
+      </div>
+      <div>
+        <button class="btn" id="o-send">Email me a sign-in link</button>
+        <div class="center" style="margin-top:10px"><button class="chip" id="o-rules" style="cursor:pointer;font-size:13px;padding:7px 14px">📖 How to play</button></div>
+      </div>
+    </div>`);
+    v.querySelector(".hero-logo").outerHTML = logoSVG("hero-logo");
+    root.appendChild(v);
+    root.querySelector("#o-rules").onclick = showRulesModal;
+    const btn = root.querySelector("#o-send");
+    btn.onclick = () => {
+      const email = root.querySelector("#o-email").value.trim();
+      if (!/^\S+@\S+\.\S+$/.test(email)) return toast("Please enter a valid email");
+      btn.disabled = true; btn.textContent = "Sending…";
+      S.sendLoginLink(email).then(() => {
+        root.querySelector(".grow").innerHTML = `<h2>Check your inbox 📬</h2>
+          <p class="sub">We sent a sign-in link to <b>${esc(email)}</b>. Open that email <b>on this device</b> and tap the link to continue.</p>
+          <p class="muted" style="font-size:13px">Didn't get it? Check your spam folder. The link works once and expires after a while — just come back here to request a new one.</p>`;
+        btn.style.display = "none";
+      }).catch(e => {
+        console.error(e); btn.disabled = false; btn.textContent = "Email me a sign-in link";
+        toast("Couldn't send the link — please try again.");
+      });
+    };
+  }
+
+  function onbName() {
+    root.innerHTML = "";
+    const v = h(`<div class="onb">
+      <div class="grow">
+        <h2>What's your name?</h2>
+        <p class="sub">You're signed in as <b>${esc(S.pendingEmail() || "")}</b>. This is how colleagues will see you on the leaderboard and in chat.</p>
+        <label class="fld">Your name</label>
+        <input class="input" id="o-name" placeholder="e.g. Sam Jansen" autocomplete="name">
+      </div>
+      <div>${dots("name")}<button class="btn" id="o-next">Continue</button></div>
+    </div>`);
+    root.appendChild(v);
+    root.querySelector("#o-next").onclick = () => {
+      const name = root.querySelector("#o-name").value.trim();
+      if (!name) return toast("Please enter your name");
+      S.signUp({ name });
+      onb = { step: "photo" }; render();
+    };
   }
 
   function onbIdentity() {

@@ -1,0 +1,14 @@
+{
+  "name": "ZB Cup",
+  "short_name": "ZB Cup",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0079BD",
+  "theme_color": "#0079BD",
+  "icons": [
+    { "src": "assets/apple-touch-icon.png", "type": "image/png", "sizes": "180x180" },
+    { "src": "assets/icon-512.png", "type": "image/png", "sizes": "512x512" },
+    { "src": "assets/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ]
+}

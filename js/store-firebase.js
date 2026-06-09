@@ -23,10 +23,13 @@
   const now = () => Date.now();
   const uid = () => "x_" + Math.random().toString(36).slice(2, 10);
   const adminEmails = (window.ZB_CONFIG.ADMIN_EMAILS || []).map(e => e.toLowerCase());
+  const EMAILKEY = "zb_emailForLink";
 
   // ---- in-memory cache (mirrors demo store shape) ----
   const cache = {
     uid: null,
+    authed: false,             // is there a signed-in (email-link) user?
+    authEmail: null,           // that user's email
     users: {},                 // uid -> user doc (incl. facts array)
     fixturesMeta: {},          // fixtureId -> { status, result, teamA, teamB }
     predictionsMine: {},       // fixtureId -> prediction
@@ -52,8 +55,10 @@
     });
   }
 
-  // ---- listeners (attached after auth) ----
+  // ---- listeners (attached once, after auth) ----
+  let listenersOn = false;
   function attachListeners() {
+    if (listenersOn) return; listenersOn = true;
     db.collection("users").onSnapshot(s => {
       const u = {};
       s.forEach(d => { u[d.id] = Object.assign({ id: d.id }, d.data()); });
@@ -89,21 +94,35 @@
 
   function me() { return cache.users[cache.uid] || null; }
 
-  // ---- ready promise: resolves once auth + first user snapshot are in ----
+  // ---- ready promise: resolves once auth state (and any incoming link) is handled ----
   const ready = new Promise(resolve => {
+    // 1) If we arrived by tapping the magic link in an email, complete sign-in.
+    if (auth.isSignInWithEmailLink(window.location.href)) {
+      let email = window.localStorage.getItem(EMAILKEY);
+      if (!email) email = window.prompt("Confirm your email to finish signing in:");
+      if (email) {
+        auth.signInWithEmailLink(email, window.location.href)
+          .then(() => { window.localStorage.removeItem(EMAILKEY); })
+          .catch(e => { console.error("link sign-in failed", e); alert("That sign-in link is invalid or expired — please request a new one."); })
+          .finally(() => { history.replaceState(null, "", window.location.pathname); });
+      }
+    }
+    // 2) Track auth state.
     auth.onAuthStateChanged(user => {
-      if (!user) { auth.signInAnonymously().catch(e => console.error("anon auth failed", e)); return; }
-      cache.uid = user.uid;
-      attachListeners();
-      // resolve once we've had a first users snapshot (so currentUser is known)
-      const unsub = db.collection("users").doc(cache.uid).onSnapshot(d => {
-        if (d.exists) cache.users[cache.uid] = Object.assign({ id: d.id }, d.data());
+      if (user) {
+        cache.uid = user.uid; cache.authEmail = user.email; cache.authed = true;
+        attachListeners();
+        db.collection("users").doc(user.uid).get()
+          .then(d => { if (d && d.exists) cache.users[user.uid] = Object.assign({ id: d.id }, d.data()); })
+          .catch(() => {})
+          .then(() => resolve());
+      } else {
+        cache.uid = null; cache.authEmail = null; cache.authed = false;
         resolve();
-        unsub();
-      }, () => resolve());
-      // safety: resolve after 4s even if rules/network hiccup
-      setTimeout(resolve, 4000);
+      }
+      refresh();
     });
+    setTimeout(resolve, 6000); // safety net
   });
 
   // ============================================================
@@ -112,15 +131,25 @@
   const Store = {
     ready, todayKey, uid, now,
     DAILY_WRONG_LIMIT: 3,
+    emailLogin: true,           // app shows the email magic-link flow
 
     /* --- current user / auth --- */
     currentUser() { return me(); },
     isAdmin() { const u = me(); return !!(u && u.isAdmin); },
-    signUp({ name, email, photoURL }) {
+    authed() { return cache.authed; },
+    pendingEmail() { return cache.authEmail || null; },
+    // Send the one-tap sign-in link to the user's email.
+    sendLoginLink(email) {
+      const acs = { url: window.location.origin + window.location.pathname, handleCodeInApp: true };
+      window.localStorage.setItem(EMAILKEY, email);
+      return auth.sendSignInLinkToEmail(email, acs);
+    },
+    signUp({ name }) {
       const id = cache.uid;
+      const email = cache.authEmail || "";
       const doc = {
-        name, email, photoURL: photoURL || null, country: null,
-        isAdmin: adminEmails.includes((email || "").toLowerCase()),
+        name, email, photoURL: null, country: null,
+        isAdmin: adminEmails.includes(email.toLowerCase()),
         blocked: false, points: 0, crowns: 0, facts: [], createdAt: now()
       };
       cache.users[id] = Object.assign({ id }, doc);           // optimistic
@@ -129,9 +158,8 @@
       return cache.users[id];
     },
     signOut() {
-      // anonymous app: signing out starts a fresh identity next load
-      cache.uid = null;
-      auth.signOut().then(() => auth.signInAnonymously());
+      cache.uid = null; cache.authed = false; cache.authEmail = null;
+      auth.signOut();
     },
     updateProfile(patch) {
       const u = me(); if (!u) return;
