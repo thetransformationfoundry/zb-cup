@@ -225,6 +225,7 @@
     savePrediction(fixtureId, { winner, scoreA, scoreB }) {
       const u = me(); const fx = mergedFixtures().find(f => f.id === fixtureId);
       if (!fx || fx.status === "finished") return { error: "Locked" };
+      if (new Date(fx.kickoff).getTime() <= Date.now()) return { error: "Predictions closed at kickoff" };
       const docId = fixtureId + "_" + u.id;
       const p = { fixtureId, uid: u.id, winner, scoreA, scoreB, pointsAwarded: null, createdAt: now() };
       cache.predictionsMine[fixtureId] = p;                    // optimistic

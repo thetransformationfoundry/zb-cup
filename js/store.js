@@ -197,6 +197,7 @@
       const me = this.currentUser(); const s = get();
       const fx = s.fixtures.find(f => f.id === fixtureId);
       if (!fx || fx.status === "finished") return { error: "Locked" };
+      if (new Date(fx.kickoff).getTime() <= now()) return { error: "Predictions closed at kickoff" };
       s.predictions[fixtureId] = s.predictions[fixtureId] || {};
       s.predictions[fixtureId][me.id] = { winner, scoreA, scoreB, pointsAwarded: null };
       save();
