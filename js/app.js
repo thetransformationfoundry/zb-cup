@@ -111,8 +111,11 @@
   ===================================================== */
   function render() {
     const u = S.currentUser();
-    // 1) Live email mode, not signed in yet → email magic-link step
-    if (S.emailLogin && !S.authed()) { onb = { step: "email" }; return renderOnboarding(); }
+    // 1) Live email mode, not signed in yet → email login (or forgot-password) step
+    if (S.emailLogin && !S.authed()) {
+      if (!onb || !["email", "forgot"].includes(onb.step)) onb = { step: "email" };
+      return renderOnboarding();
+    }
     // 2) Signed in (or demo) but no profile → name/identity → photo → facts → country
     if (!u) {
       const first = S.emailLogin ? "name" : "identity";
@@ -141,6 +144,7 @@
   function renderOnboarding() {
     const step = onb.step;
     if (step === "email") return onbEmail();
+    if (step === "forgot") return onbForgot();
     if (step === "identity") return onbIdentity();
     if (step === "name") return onbName();
     if (step === "photo") return onbPhoto();
@@ -173,10 +177,8 @@
     const signinBtn = root.querySelector("#o-signin");
     root.querySelector("#o-rules").onclick = showRulesModal;
     root.querySelector("#o-forgot").onclick = () => {
-      const email = root.querySelector("#o-email").value.trim();
-      if (!/^\S+@\S+\.\S+$/.test(email)) return toast("Type your email above first, then tap Forgot password");
-      S.resetPassword(email).then(() => toast("Password reset email sent — check your inbox"))
-        .catch(() => toast("Couldn't send a reset email — check the address"));
+      onb = { step: "forgot", email: root.querySelector("#o-email").value.trim() };
+      render();
     };
     const run = (mode) => {
       const email = root.querySelector("#o-email").value.trim();
@@ -202,6 +204,42 @@
     };
     signupBtn.onclick = () => run("signup");
     signinBtn.onclick = () => run("signin");
+  }
+
+  function onbForgot() {
+    root.innerHTML = "";
+    const mail = `<svg viewBox="0 0 24 24" fill="none" stroke="var(--zb-blue)" stroke-width="1.7" width="72" height="72"><rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><path d="M3.5 6.5l8.5 6.5 8.5-6.5"/></svg>`;
+    const v = h(`<div class="onb">
+      <div class="grow">
+        <button class="btn ghost" id="o-back" style="width:auto;padding:6px 10px 6px 0;margin-bottom:6px">‹ Back to sign in</button>
+        <h2>Reset your password</h2>
+        <p class="sub">Enter your work email and we'll send you a link to set a new password.</p>
+        <label class="fld">Work email</label>
+        <input class="input" id="o-email" type="email" inputmode="email" placeholder="you@zimmerbiomet.com" autocomplete="email" value="${esc((onb && onb.email) || "")}">
+      </div>
+      <div id="o-foot"><button class="btn" id="o-send">Send reset link</button></div>
+    </div>`);
+    root.appendChild(v);
+    root.querySelector("#o-back").onclick = () => { onb = { step: "email" }; render(); };
+    const btn = root.querySelector("#o-send");
+    btn.onclick = () => {
+      const email = root.querySelector("#o-email").value.trim();
+      if (!/^\S+@\S+\.\S+$/.test(email)) return toast("Please enter a valid email");
+      btn.disabled = true; btn.textContent = "Sending…";
+      const showSent = () => {
+        v.querySelector(".grow").innerHTML = `
+          <div class="center" style="margin-top:36px">
+            <div style="margin-bottom:18px">${mail}</div>
+            <h2 style="margin-bottom:8px">Check your email 📬</h2>
+            <p class="sub">If an account exists for <b>${esc(email)}</b>, we've sent a link to reset your password.</p>
+            <p class="muted" style="font-size:14px">Be sure to check your <b>junk / spam</b> folder too — it can land there. Tap the link, choose a new password, then come back and sign in.</p>
+          </div>`;
+        v.querySelector("#o-foot").innerHTML = `<button class="btn" id="o-done">Back to sign in</button>`;
+        v.querySelector("#o-done").onclick = () => { onb = { step: "email" }; render(); };
+      };
+      // Show the same confirmation whether or not the email exists (don't reveal accounts).
+      S.resetPassword(email).then(showSent).catch(showSent);
+    };
   }
 
   function onbName() {
