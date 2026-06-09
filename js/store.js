@@ -9,7 +9,7 @@
 (function () {
   // Bump this version whenever the seed/demo data changes (e.g. new fixtures).
   // Changing it makes the app discard old cached demo data and re-seed fresh.
-  const KEY = "zbcup_v4";
+  const KEY = "zbcup_v6";
   const todayKey = () => new Date().toISOString().slice(0, 10);
   const uid = () => "u_" + Math.random().toString(36).slice(2, 9);
   const now = () => Date.now();
@@ -24,6 +24,8 @@
       fixtures: JSON.parse(JSON.stringify(window.ZB_FIXTURES_SEED || [])),
       posts: [],
       zbFacts: [],
+      notifications: [],
+      announcement: null,
       tournament: { winnerCountryCode: null }
     };
   }
@@ -43,6 +45,12 @@
   function persist(s) { localStorage.setItem(KEY, JSON.stringify(s || state)); }
   function get() { if (!state) state = load(); return state; }
   function save() { persist(get()); }
+  function notify(targetId, type, text) {
+    const s = get(); const me = s.currentUserId ? s.users[s.currentUserId] : null;
+    if (!targetId || !me || targetId === me.id) return;
+    if (!s.notifications) s.notifications = [];
+    s.notifications.push({ id: uid(), userId: targetId, type, text, fromName: me.name, createdAt: now(), read: false });
+  }
 
   /* ---------- demo seed: a few colleagues so it's not empty ---------- */
   function seedDemo(s) {
@@ -179,9 +187,9 @@
       const correct = optionIndex === fact.answerIndex;
       s.guesses.push({ guesserId: me.id, targetUserId, factId, dateKey: todayKey(), correct });
       if (correct) {
-        me.points += 20;
-        const target = s.users[targetUserId];
-        if (target) target.crowns = (target.crowns || 0) + 1;
+        // +20 pts and a 👑 crown for the GUESSER (crown = facts you've cracked)
+        me.points += 20; me.crowns = (me.crowns || 0) + 1;
+        notify(targetUserId, "guess", `${me.name} guessed one of your fun facts!`);
       }
       save();
       return { correct, answerIndex: correct ? fact.answerIndex : null };
@@ -223,20 +231,27 @@
 
     /* --- chat --- */
     posts() { return get().posts.slice().sort((a, b) => a.createdAt - b.createdAt); },
-    addPost(text) {
+    goalers(postId) {
+      const s = get(); const p = s.posts.find(x => x.id === postId); if (!p) return [];
+      return (p.goaledBy || []).map(id => (s.users[id] || {}).name || "Someone");
+    },
+    addPost(text, imageURL) {
       const me = this.currentUser(); const s = get();
       if (me.blocked) return { error: "You've been blocked from posting by the admin." };
       s.posts.push({ id: uid(), authorId: me.id, authorName: me.name,
-        authorPhoto: me.photoURL, text, goals: 0, goaledBy: [], createdAt: now(), replies: [] });
+        authorPhoto: me.photoURL, text: text || "", imageURL: imageURL || null, goals: 0, goaledBy: [], createdAt: now(), replies: [] });
+      let bonus = 0;
+      if (imageURL && me.lastPhotoBonus !== todayKey()) { bonus = 50; me.points = (me.points || 0) + 50; me.lastPhotoBonus = todayKey(); }
       save();
-      return { ok: true };
+      return { ok: true, bonus };
     },
     addReply(postId, text) {
       const me = this.currentUser(); const s = get();
       if (me.blocked) return { error: "You've been blocked from posting by the admin." };
       const p = s.posts.find(x => x.id === postId); if (!p) return { error: "Post not found" };
       if (!p.replies) p.replies = [];
-      p.replies.push({ id: uid(), authorId: me.id, authorName: me.name, authorPhoto: me.photoURL, text, createdAt: now() });
+      p.replies.push({ id: uid(), authorId: me.id, authorName: me.name, authorPhoto: me.photoURL, text, goals: 0, goaledBy: [], createdAt: now() });
+      notify(p.authorId, "reply", `${me.name} replied to your post`);
       save();
       return { ok: true };
     },
@@ -249,11 +264,36 @@
       const p = s.posts.find(x => x.id === postId); if (!p) return;
       const i = p.goaledBy.indexOf(me.id);
       if (i >= 0) { p.goaledBy.splice(i, 1); p.goals--; }
-      else { p.goaledBy.push(me.id); p.goals++; }
+      else { p.goaledBy.push(me.id); p.goals++; notify(p.authorId, "goal", `${me.name} gave your post a Goal ⚽`); }
+      save();
+    },
+    toggleReplyGoal(postId, replyId) {
+      const me = this.currentUser(); const s = get();
+      const p = s.posts.find(x => x.id === postId); if (!p || !p.replies) return;
+      const r = p.replies.find(x => x.id === replyId); if (!r) return;
+      r.goaledBy = r.goaledBy || []; r.goals = r.goals || 0;
+      const i = r.goaledBy.indexOf(me.id);
+      if (i >= 0) { r.goaledBy.splice(i, 1); r.goals--; }
+      else { r.goaledBy.push(me.id); r.goals++; notify(r.authorId, "goal", `${me.name} gave your reply a Goal ⚽`); }
       save();
     },
     deletePost(postId) {
       const s = get(); s.posts = s.posts.filter(p => p.id !== postId); save();
+    },
+
+    /* --- notifications --- */
+    notifications() {
+      const s = get(); const me = this.currentUser(); if (!me) return [];
+      return (s.notifications || []).filter(n => n.userId === me.id).sort((a, b) => b.createdAt - a.createdAt);
+    },
+    unreadCount() {
+      const s = get(); const me = this.currentUser(); if (!me) return 0;
+      return (s.notifications || []).filter(n => n.userId === me.id && !n.read).length;
+    },
+    markAllRead() {
+      const s = get(); const me = this.currentUser(); if (!me) return;
+      (s.notifications || []).forEach(n => { if (n.userId === me.id) n.read = true; });
+      save();
     },
 
     /* --- users: admin block/unblock --- */
@@ -291,6 +331,16 @@
       save();
     },
     deleteZbFact(id) { const s = get(); s.zbFacts = s.zbFacts.filter(f => f.id !== id); save(); },
+
+    /* --- announcement (admin pinned post) --- */
+    announcement() { return get().announcement; },
+    setAnnouncement(text) {
+      const s = get(); const me = this.currentUser();
+      s.announcement = { text, byName: me ? me.name : "Admin", createdAt: now() };
+      Object.values(s.users).forEach(u => { if (!me || u.id !== me.id) { (s.notifications = s.notifications || []).push({ id: uid(), userId: u.id, type: "announcement", text: "📢 " + text.slice(0, 90), fromName: me ? me.name : "Admin", createdAt: now(), read: false }); } });
+      save();
+    },
+    clearAnnouncement() { const s = get(); s.announcement = null; save(); },
 
     /* --- tournament (admin) --- */
     tournament() { return get().tournament; },

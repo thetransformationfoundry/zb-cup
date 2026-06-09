@@ -35,6 +35,8 @@
     guessesMine: [],           // my guesses
     posts: [],                 // chat posts
     zbFacts: [],
+    notifications: [],         // my in-app notifications
+    announcement: null,        // pinned admin announcement
     tournament: { winnerCountryCode: null }
   };
 
@@ -80,6 +82,10 @@
       cache.tournament = d.exists ? d.data() : { winnerCountryCode: null };
       refresh();
     });
+    db.doc("tournament/announcement").onSnapshot(d => {
+      cache.announcement = (d.exists && d.data().text) ? d.data() : null;
+      refresh();
+    });
     // my predictions + my guesses (scoped to me)
     db.collection("predictions").where("uid", "==", cache.uid).onSnapshot(s => {
       const p = {}; s.forEach(d => { const v = d.data(); p[v.fixtureId] = v; });
@@ -89,6 +95,16 @@
       cache.guessesMine = s.docs.map(d => Object.assign({ id: d.id }, d.data()));
       refresh();
     });
+    db.collection("notifications").where("userId", "==", cache.uid).onSnapshot(s => {
+      cache.notifications = s.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      refresh();
+    });
+  }
+
+  // write a notification doc for a recipient (no-op if notifying yourself)
+  function notify(userId, type, text) {
+    if (!userId || userId === cache.uid) return;
+    db.collection("notifications").add({ userId, type, text, fromName: (me() || {}).name || "", createdAt: now(), read: false });
   }
 
   function me() { return cache.users[cache.uid] || null; }
@@ -209,11 +225,10 @@
       cache.guessesMine.push(g);                               // optimistic
       db.collection("guesses").doc(g.id).set(g);
       if (correct) {
-        u.points = (u.points || 0) + 20;                       // optimistic
-        db.collection("users").doc(u.id).update({ points: FV.increment(20) });
-        const t = cache.users[targetUserId];
-        if (t) { t.crowns = (t.crowns || 0) + 1; }
-        db.collection("users").doc(targetUserId).update({ crowns: FV.increment(1) });
+        // +20 pts and a 👑 crown for the GUESSER (crown = facts you've cracked)
+        u.points = (u.points || 0) + 20; u.crowns = (u.crowns || 0) + 1;
+        db.collection("users").doc(u.id).update({ points: FV.increment(20), crowns: FV.increment(1) });
+        notify(targetUserId, "guess", `${u.name} guessed one of your fun facts!`);
       }
       refresh();
       return { correct, answerIndex: correct ? fact.answerIndex : null };
@@ -264,11 +279,22 @@
 
     /* --- chat --- */
     posts() { return cache.posts.slice().sort((a, b) => a.createdAt - b.createdAt); },
-    addPost(text) {
+    goalers(postId) { // names of people who gave a Goal
+      const p = cache.posts.find(x => x.id === postId); if (!p) return [];
+      return (p.goaledBy || []).map(id => (cache.users[id] || {}).name || "Someone");
+    },
+    addPost(text, imageURL) {
       const u = me(); if (u.blocked) return { error: "You've been blocked from posting by the admin." };
-      const p = { authorId: u.id, authorName: u.name, authorPhoto: u.photoURL || null, text, goals: 0, goaledBy: [], replies: [], createdAt: now() };
+      const p = { authorId: u.id, authorName: u.name, authorPhoto: u.photoURL || null, text: text || "", imageURL: imageURL || null, goals: 0, goaledBy: [], replies: [], createdAt: now() };
       db.collection("posts").add(p);
-      return { ok: true };
+      // photo bonus: +50 pts, max once per day
+      let bonus = 0;
+      if (imageURL && u.lastPhotoBonus !== todayKey()) {
+        bonus = 50; u.points = (u.points || 0) + 50; u.lastPhotoBonus = todayKey();
+        db.collection("users").doc(u.id).update({ points: FV.increment(50), lastPhotoBonus: todayKey() });
+      }
+      refresh();
+      return { ok: true, bonus };
     },
     toggleGoal(postId) {
       const u = me(); const p = cache.posts.find(x => x.id === postId); if (!p) return;
@@ -277,18 +303,49 @@
         goaledBy: on ? FV.arrayRemove(u.id) : FV.arrayUnion(u.id),
         goals: FV.increment(on ? -1 : 1)
       });
+      if (!on) notify(p.authorId, "goal", `${u.name} gave your post a Goal ⚽`);
     },
     deletePost(postId) { db.collection("posts").doc(postId).delete(); },
     addReply(postId, text) {
       const u = me(); if (u.blocked) return { error: "You've been blocked from posting by the admin." };
-      const r = { id: uid(), authorId: u.id, authorName: u.name, authorPhoto: u.photoURL || null, text, createdAt: now() };
+      const p = cache.posts.find(x => x.id === postId);
+      const r = { id: uid(), authorId: u.id, authorName: u.name, authorPhoto: u.photoURL || null, text, goals: 0, goaledBy: [], createdAt: now() };
       db.collection("posts").doc(postId).update({ replies: FV.arrayUnion(r) });
+      if (p) notify(p.authorId, "reply", `${u.name} replied to your post`);
       return { ok: true };
     },
     deleteReply(postId, replyId) {
       const p = cache.posts.find(x => x.id === postId); if (!p) return;
       const newReplies = (p.replies || []).filter(r => r.id !== replyId);
       db.collection("posts").doc(postId).update({ replies: newReplies });
+    },
+    toggleReplyGoal(postId, replyId) {
+      const u = me(); const p = cache.posts.find(x => x.id === postId); if (!p) return;
+      let target = null;
+      const newReplies = (p.replies || []).map(r => {
+        if (r.id !== replyId) return r;
+        const gb = r.goaledBy || []; const on = gb.includes(u.id);
+        target = r;
+        return Object.assign({}, r, {
+          goaledBy: on ? gb.filter(x => x !== u.id) : gb.concat(u.id),
+          goals: (r.goals || 0) + (on ? -1 : 1),
+          _added: !on
+        });
+      });
+      const added = newReplies.find(r => r.id === replyId && r._added);
+      newReplies.forEach(r => delete r._added);
+      db.collection("posts").doc(postId).update({ replies: newReplies });
+      if (added && target) notify(target.authorId, "goal", `${u.name} gave your reply a Goal ⚽`);
+    },
+
+    /* --- notifications --- */
+    notifications() { return cache.notifications.slice().sort((a, b) => b.createdAt - a.createdAt); },
+    unreadCount() { return cache.notifications.filter(n => !n.read).length; },
+    markAllRead() {
+      const batch = db.batch();
+      cache.notifications.filter(n => !n.read).forEach(n => { n.read = true; batch.update(db.collection("notifications").doc(n.id), { read: true }); });
+      batch.commit().catch(() => {});
+      refresh();
     },
 
     /* --- users: admin block --- */
@@ -311,6 +368,20 @@
       db.collection("zbFacts").add({ title, body, imageURL: imageURL || null, linkURL: linkURL || null, createdAt: now(), createdBy: cache.uid });
     },
     deleteZbFact(id) { db.collection("zbFacts").doc(id).delete(); },
+
+    /* --- announcement (admin pinned post) --- */
+    announcement() { return cache.announcement; },
+    setAnnouncement(text) {
+      db.doc("tournament/announcement").set({ text, byName: (me() || {}).name || "Admin", createdAt: now() });
+      // ping everyone's bell
+      const batch = db.batch();
+      Object.keys(cache.users).forEach(id => {
+        if (id === cache.uid) return;
+        batch.set(db.collection("notifications").doc(), { userId: id, type: "announcement", text: "📢 " + text.slice(0, 90), fromName: (me() || {}).name || "Admin", createdAt: now(), read: false });
+      });
+      batch.commit().catch(() => {});
+    },
+    clearAnnouncement() { db.doc("tournament/announcement").delete().catch(() => {}); },
 
     /* --- tournament --- */
     tournament() { return cache.tournament || { winnerCountryCode: null }; },

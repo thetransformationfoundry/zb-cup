@@ -53,6 +53,9 @@ body {
   border-bottom: 1px solid var(--line);
 }
 .appbar .logo { height: 22px; color: var(--ink); }
+.bell { position: relative; background: none; border: none; cursor: pointer; color: var(--ink); width: 26px; height: 26px; padding: 0; flex: 0 0 auto; }
+.bell svg { width: 24px; height: 24px; }
+.bell .badge { position: absolute; top: -5px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--bad); color: #fff; font-size: 10px; font-weight: 700; align-items: center; justify-content: center; }
 .appbar h1 { font-size: 18px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
 .appbar .spacer { flex: 1; }
 

@@ -32,14 +32,15 @@
     document.body.appendChild(bg);
     return bg;
   }
-  function readImage(file, cb) {
+  function readImage(file, cb, max) {
     if (!file) return cb(null);
+    max = max || 320;
     const r = new FileReader();
     r.onload = () => {
       // downscale to keep photos small (fits Firestore + localStorage)
       const img = new Image();
       img.onload = () => {
-        const max = 320, scale = Math.min(1, max / Math.max(img.width, img.height));
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
         const c = document.createElement("canvas");
         c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
         c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
@@ -85,6 +86,12 @@
   }
   const OPTS_LABEL = `Possible answers — tap the circle ⦿ next to the TRUE one`;
 
+  // crown badge: 👑 + count, shown the same way everywhere (times your facts were guessed)
+  function crownBadge(n) {
+    if (!n) return "";
+    return `<span class="crown" title="Fun facts you've correctly guessed">${I.crown}</span><span style="color:var(--gold);font-weight:700;font-size:13px;margin-left:1px">${n}</span>`;
+  }
+
   /* ---------------- icons ---------------- */
   const I = {
     ball: '<svg viewBox="0 0 243.596 243.596" width="1em" height="1em" fill="currentColor" style="vertical-align:-0.15em"><path d="M129,7.2A121.8,121.8,0,1,0,250.8,129,121.69,121.69,0,0,0,129,7.2Zm8.7,42.629,26.97-18.777a103.707,103.707,0,0,1,48.864,36.9l-8.337,29-11.817,4.06-55.679-39Zm43.644,64.017L161.55,172.5H96.3L76.654,113.846,129,77.161ZM93.329,31.052,120.3,49.829v12.18l-55.534,39-11.817-4.2L44.609,67.954A103.674,103.674,0,0,1,93.329,31.052ZM73.319,190.767l-26.462,2.247a103.171,103.171,0,0,1-22.112-63.147l22.62-16.53,12.035,4.2L80.134,178.95Zm82.286,39.149A103.764,103.764,0,0,1,129,233.4a110.554,110.554,0,0,1-26.607-3.48l-14.137-30.3,5.582-9.57H164.16l5.582,9.57Zm55.534-36.684-26.462-2.32-6.96-11.817,20.88-61.552,12.035-4.2,22.62,16.53A104.283,104.283,0,0,1,211.139,193.232Z" transform="translate(-7.2 -7.2)"/></svg>',
@@ -94,6 +101,7 @@
     more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>',
     chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>',
     crown: '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" style="vertical-align:-2px"><path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg>',
     camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M3 8a2 2 0 012-2h2l1.5-2h7L18 6h2a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg>',
     info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
     settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 00-1.7-1l-.3-2.6H9.4l-.3 2.6a7 7 0 00-1.7 1l-2.3-1-2 3.4L5 11a7 7 0 000 2l-2 1.5 2 3.4 2.3-1a7 7 0 001.7 1l.3 2.6h5.2l.3-2.6a7 7 0 001.7-1l2.3 1 2-3.4-2-1.5a7 7 0 00.1-1z"/></svg>',
@@ -104,6 +112,7 @@
   let tab = "matches";
   let matchFilter = "upcoming";
   let expandedReplies = new Set(); // chat posts whose replies are expanded
+  let pendingChatPhoto = null;     // photo attached to the chat composer, before posting
   let onb = null; // onboarding working state
 
   /* =====================================================
@@ -330,7 +339,7 @@
     const v = h(`<div class="onb">
       <div class="grow">
         <h2>3 fun facts about you</h2>
-        <p class="sub">Colleagues guess these to earn points — and you get a 👑 crown each time someone's right. Make them surprising!</p>
+        <p class="sub">These are what colleagues will try to guess about you. Guessing others' facts earns you points and 👑 crowns — so set good ones, then go guessing! Make them surprising.</p>
         ${factsIntro()}
         <div id="ff"></div>
       </div>
@@ -418,6 +427,7 @@
       <div class="appbar">
         <span class="logo">${logoSVG("logo")}</span>
         <span class="spacer"></span>
+        <button class="bell" id="my-bell" aria-label="Notifications">${I.bell}<span class="badge" id="my-badge" style="display:none"></span></button>
         <span class="chip points" id="my-pts"></span>
         <span id="my-av"></span>
       </div>
@@ -436,6 +446,10 @@
     shell.querySelector("#my-av").innerHTML = avatar(meNow, "sm");
     shell.querySelector("#my-av").style.cursor = "pointer";
     shell.querySelector("#my-av").onclick = () => { tab = "more"; renderApp(); };
+    const unread = S.unreadCount ? S.unreadCount() : 0;
+    const badge = shell.querySelector("#my-badge");
+    if (unread > 0) { badge.style.display = "flex"; badge.textContent = unread > 9 ? "9+" : unread; }
+    shell.querySelector("#my-bell").onclick = openNotifications;
     shell.querySelectorAll(".tab").forEach(b => b.onclick = () => { tab = b.dataset.tab; renderApp(); });
     drawView();
   }
@@ -680,7 +694,7 @@
     if (!others.length) wrap.appendChild(h(`<div class="empty">${I.star}<p>No one to guess yet. Invite colleagues!</p></div>`));
     others.forEach(u => {
       const row = h(`<div class="card tight list-tap">${avatar(u)}
-        <div><div style="font-weight:600">${esc(u.name)} ${u.crowns ? `<span class="crown">${I.crown}</span>`.repeat(Math.min(u.crowns, 3)) : ""}</div>
+        <div><div style="font-weight:600">${esc(u.name)} ${crownBadge(u.crowns)}</div>
         <div class="muted" style="font-size:13px">3 facts to guess</div></div>
         <span class="chev">${I.chev}</span></div>`);
       row.onclick = () => guessPerson(u);
@@ -728,7 +742,7 @@
   function guessPerson(u) {
     const facts = S.factsFor(u.id);
     const bg = modal(`<h3>Guess ${esc(u.name)}</h3>
-      <p>Correct = 20 pts + a crown for them. You have <b id="gl"></b> wrong guess(es) left today — get one right to keep going!</p>
+      <p>Correct = 20 pts + a 👑 crown for you. You have <b id="gl"></b> wrong guess(es) left today — get one right to keep going!</p>
       <div id="gf"></div>
       <button class="btn secondary" id="close" style="margin-top:6px">Close</button>`);
     const gf = bg.querySelector("#gf");
@@ -771,14 +785,14 @@
   function viewLeaderboard() {
     const me = S.currentUser();
     const board = S.leaderboard();
-    const wrap = h(`<div class="screen"><h2>Leaderboard</h2><p class="sub">Live ranking. Earn points from matches, fun facts, and your country.</p></div>`);
+    const wrap = h(`<div class="screen"><h2>Leaderboard</h2><p class="sub">Live ranking. Earn points from matches, fun facts, and your country. ${I.crown} = fun facts you've correctly guessed.</p></div>`);
     const card = h(`<div class="card"></div>`);
     board.forEach((u, i) => {
       const row = h(`<div class="lb-row ${i === 0 ? "top1" : ""} ${u.id === me.id ? "me" : ""}">
         <span class="lb-rank">${i + 1}</span>
         ${avatar(u, "sm")}
         ${u.country ? `<img class="flag" src="${window.ZB_FLAG(u.country.code)}" alt="${esc(u.country.name)}" title="${esc(u.country.name)}" loading="lazy" style="width:24px;height:17px">` : ""}
-        <span class="lb-name">${esc(u.name)}${u.id === me.id ? " (you)" : ""} ${u.crowns ? `<span class="crown">${I.crown}</span>` : ""}</span>
+        <span class="lb-name">${esc(u.name)}${u.id === me.id ? " (you)" : ""} ${crownBadge(u.crowns)}</span>
         <span class="chip points">${u.points}</span>
       </div>`);
       card.appendChild(row);
@@ -787,25 +801,68 @@
     setView(wrap);
   }
 
+  function openNotifications() {
+    const items = S.notifications ? S.notifications() : [];
+    const icon = t => t === "guess" ? "👑" : t === "reply" ? "💬" : t === "announcement" ? "📢" : "⚽";
+    const bg = modal(`<h3>Notifications</h3>
+      <div style="max-height:60vh;overflow-y:auto">
+        ${items.length ? items.map(n => `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
+          <span style="font-size:20px">${icon(n.type)}</span>
+          <div style="flex:1"><div style="font-size:14px">${esc(n.text)}</div><div class="muted" style="font-size:12px">${timeAgo(n.createdAt)} ago</div></div>
+          ${n.read ? "" : `<span style="width:8px;height:8px;border-radius:50%;background:var(--zb-blue);flex:0 0 auto"></span>`}
+        </div>`).join("") : `<div class="empty">${I.bell}<p>No notifications yet. You'll hear when someone guesses your fact, replies, or gives you a Goal.</p></div>`}
+      </div>
+      <button class="btn" id="x" style="margin-top:14px">Close</button>`);
+    bg.querySelector("#x").onclick = () => bg.remove();
+    if (S.unreadCount && S.unreadCount() > 0 && S.markAllRead) {
+      S.markAllRead();
+      const b = document.getElementById("my-badge"); if (b) b.style.display = "none";
+    }
+  }
+
+  function showGoalers(postId) {
+    const names = S.goalers ? S.goalers(postId) : [];
+    const bg = modal(`<h3>${I.ball} Goals</h3>${names.length
+      ? `<div style="max-height:50vh;overflow-y:auto">${names.map(n => `<div style="padding:9px 0;border-bottom:1px solid var(--line);font-weight:600">${esc(n)}</div>`).join("")}</div>`
+      : `<p class="muted">No Goals yet.</p>`}<button class="btn" id="x" style="margin-top:14px">Close</button>`);
+    bg.querySelector("#x").onclick = () => bg.remove();
+  }
+
   /* ---------------- CHAT ---------------- */
   function viewChat() {
     const me = S.currentUser();
-    const wrap = h(`<div class="screen" style="padding-bottom:120px"><h2>Chat</h2><p class="sub">Say hi, share your predictions, and give "Goals" ⚽ to cheer colleagues on.</p><div id="feed"></div></div>`);
+    const wrap = h(`<div class="screen" style="padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px) + 96px)"><h2>Chat</h2><p class="sub">Say hi, share predictions, post a celebration photo (+50 pts, once a day!), and give "Goals" ⚽ to cheer colleagues on.</p><div id="feed"></div></div>`);
     const feed = wrap.querySelector("#feed");
+    // pinned admin announcement
+    const ann = S.announcement ? S.announcement() : null;
+    if (ann) {
+      const card = h(`<div class="card" style="background:linear-gradient(135deg,#ffffff,var(--zb-blue-soft));border-color:var(--zb-blue)">
+        <div class="row between" style="margin-bottom:6px"><span class="chip">📢 Announcement</span>
+          ${S.isAdmin() ? `<button class="ann-clear btn ghost" style="width:auto;padding:0;font-size:12px">Remove</button>` : ""}</div>
+        <div style="white-space:pre-wrap">${esc(ann.text)}</div>
+        <div class="muted" style="font-size:12px;margin-top:8px">${esc(ann.byName || "Admin")} · ${timeAgo(ann.createdAt)} ago</div>
+      </div>`);
+      const clr = card.querySelector(".ann-clear");
+      if (clr) clr.onclick = () => { S.clearAnnouncement(); viewChat(); };
+      feed.appendChild(card);
+    }
     const blockedIds = new Set(S.allUsers().filter(u => u.blocked).map(u => u.id));
-    const posts = S.posts().filter(p => !blockedIds.has(p.authorId)); // hide blocked users' posts
+    const posts = S.posts().filter(p => !blockedIds.has(p.authorId)).reverse(); // newest first
     if (!posts.length) feed.appendChild(h(`<div class="empty">${I.chat}<p>No messages yet. Start the conversation!</p></div>`));
     posts.forEach(p => {
       const mine = p.authorId === me.id;
-      const on = p.goaledBy.includes(me.id);
+      const goals = p.goals || 0;
+      const on = (p.goaledBy || []).includes(me.id);
       const replies = (p.replies || []).filter(r => !blockedIds.has(r.authorId));
       const post = h(`<div class="post">${avatar({ name: p.authorName, photoURL: p.authorPhoto }, "sm")}
         <div class="body">
           <div class="meta"><b style="color:var(--ink)">${esc(p.authorName)}</b><span>· ${timeAgo(p.createdAt)}</span>
             ${mine || S.isAdmin() ? `<button class="del btn ghost" style="margin-left:auto;width:auto;padding:0;font-size:12px">Delete</button>` : ""}</div>
-          <div>${esc(p.text)}</div>
-          <div class="row" style="gap:18px;margin-top:8px;flex-wrap:wrap">
-            <button class="goal-btn ${on ? "on" : ""}">${I.ball}<span>${p.goals} Goal${p.goals === 1 ? "" : "s"}</span></button>
+          ${p.text ? `<div>${esc(p.text)}</div>` : ""}
+          ${p.imageURL ? `<img src="${esc(p.imageURL)}" alt="photo" style="width:100%;border-radius:12px;margin-top:8px">` : ""}
+          <div class="row" style="gap:16px;margin-top:8px;flex-wrap:wrap">
+            <button class="goal-btn ${on ? "on" : ""}">${I.ball}<span>${goals} Goal${goals === 1 ? "" : "s"}</span></button>
+            ${goals > 0 ? `<button class="who-btn goal-btn" style="font-size:12px">see who</button>` : ""}
             <button class="reply-btn goal-btn">💬 <span>Reply</span></button>
             ${replies.length ? `<button class="toggle-btn goal-btn"><span>${expandedReplies.has(p.id) ? "Hide replies" : "View " + replies.length + " repl" + (replies.length === 1 ? "y" : "ies")}</span></button>` : ""}
           </div>
@@ -813,6 +870,7 @@
           <div class="reply-box" style="display:none"></div>
         </div></div>`);
       post.querySelector(".goal-btn").onclick = () => { S.toggleGoal(p.id); viewChat(); };
+      const who = post.querySelector(".who-btn"); if (who) who.onclick = () => showGoalers(p.id);
       const del = post.querySelector(".del"); if (del) del.onclick = () => { S.deletePost(p.id); viewChat(); };
       const toggle = post.querySelector(".toggle-btn");
       if (toggle) toggle.onclick = () => { expandedReplies.has(p.id) ? expandedReplies.delete(p.id) : expandedReplies.add(p.id); viewChat(); };
@@ -822,12 +880,15 @@
         repWrap.style.cssText = "margin-top:10px;padding-left:10px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:8px";
         replies.forEach(r => {
           const rmine = r.authorId === me.id;
+          const rgoals = r.goals || 0, ron = (r.goaledBy || []).includes(me.id);
           const rr = h(`<div class="post" style="margin:0">${avatar({ name: r.authorName, photoURL: r.authorPhoto }, "sm")}
             <div class="body" style="background:#F7F9FB">
               <div class="meta"><b style="color:var(--ink)">${esc(r.authorName)}</b><span>· ${timeAgo(r.createdAt)}</span>
                 ${rmine || S.isAdmin() ? `<button class="rdel btn ghost" style="margin-left:auto;width:auto;padding:0;font-size:12px">Delete</button>` : ""}</div>
               <div>${esc(r.text)}</div>
+              <button class="rgoal goal-btn ${ron ? "on" : ""}" style="margin-top:6px">${I.ball}<span>${rgoals} Goal${rgoals === 1 ? "" : "s"}</span></button>
             </div></div>`);
+          rr.querySelector(".rgoal").onclick = () => { if (S.toggleReplyGoal) { S.toggleReplyGoal(p.id, r.id); viewChat(); } };
           const rdel = rr.querySelector(".rdel"); if (rdel) rdel.onclick = () => { S.deleteReply(p.id, r.id); viewChat(); };
           repWrap.appendChild(rr);
         });
@@ -858,14 +919,32 @@
       root.appendChild(blk);
       return;
     }
-    const comp = h(`<div class="composer"><input id="c-in" placeholder="Write a message…" maxlength="280"><button class="btn sm" id="c-send">Post</button></div>`);
+    const comp = h(`<div class="composer" style="flex-wrap:wrap">
+      <div id="c-prev" style="width:100%;display:none;margin-bottom:6px"></div>
+      <button class="btn secondary" id="c-photo" style="width:auto;padding:0 12px;font-size:18px" title="Add a photo">📷</button>
+      <input id="c-in" placeholder="Write a message…" maxlength="280">
+      <button class="btn sm" id="c-send" style="width:auto">Post</button>
+      <input type="file" accept="image/*" id="c-file" style="display:none">
+    </div>`);
     root.appendChild(comp);
+    const prev = comp.querySelector("#c-prev");
+    const renderPrev = () => {
+      if (pendingChatPhoto) {
+        prev.style.display = "block";
+        prev.innerHTML = `<span style="position:relative;display:inline-block"><img src="${pendingChatPhoto}" style="height:54px;border-radius:8px"><button id="c-rm" style="position:absolute;top:-6px;right:-6px;background:#141414;color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;line-height:1">×</button></span>`;
+        prev.querySelector("#c-rm").onclick = () => { pendingChatPhoto = null; renderPrev(); };
+      } else { prev.style.display = "none"; prev.innerHTML = ""; }
+    };
+    renderPrev();
+    comp.querySelector("#c-photo").onclick = () => comp.querySelector("#c-file").click();
+    comp.querySelector("#c-file").onchange = e => readImage(e.target.files[0], d => { pendingChatPhoto = d; renderPrev(); }, 720);
     const send = () => {
       const inp = comp.querySelector("#c-in"); const t = inp.value.trim();
-      if (!t) return;
-      const r = S.addPost(t); if (r && r.error) return toast(r.error);
-      inp.value = ""; viewChat();
-      setTimeout(() => { const f = root.querySelector("#feed"); if (f) f.lastElementChild.scrollIntoView({ behavior: "smooth" }); }, 50);
+      if (!t && !pendingChatPhoto) return;
+      const r = S.addPost(t, pendingChatPhoto); if (r && r.error) return toast(r.error);
+      if (r && r.bonus) { celebrate(); toast("Nice photo! +50 pts 🎉"); }
+      inp.value = ""; pendingChatPhoto = null; viewChat();
+      setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 60);
     };
     comp.querySelector("#c-send").onclick = send;
     comp.querySelector("#c-in").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
@@ -983,7 +1062,7 @@
       <div class="section-title">Match predictions (up to 10 pts/game)</div>
       <p>For each game predict the <b>winner</b> (+5) and the <b>exact score</b> (+5). Predictions lock at kickoff.</p>
       <div class="section-title">Fun facts (20 pts each)</div>
-      <p>Set 3 multiple-choice facts about yourself. Then guess colleagues' facts for <b>20 points</b> each — they earn a 👑 crown, and answers stay hidden until you get it right. You get <b>3 wrong guesses per day</b>: keep guessing as long as you're right, but 3 wrong and you're done until tomorrow. So choose carefully!</p>
+      <p>Set 3 multiple-choice facts about yourself. Then guess colleagues' facts for <b>20 points</b> each — every correct guess also earns <b>you</b> a 👑 crown, and answers stay hidden until you get it right. You get <b>3 wrong guesses per day</b>: keep guessing as long as you're right, but 3 wrong and you're done until tomorrow. So choose carefully!</p>
       <div class="section-title">Leaderboard</div>
       <p>All your points add up here, live. Highest total wins bragging rights.</p>
       <div class="section-title">Chat & Goals</div>
@@ -1032,7 +1111,7 @@
       </div>
       <p class="muted" style="font-size:13px;margin:0 0 6px">${locked
         ? "These can't be changed — they're what colleagues guess about you."
-        : "Set 3 fun facts so colleagues can guess them (you earn a 👑 each time). They lock once all 3 are saved."}</p>
+        : "Set 3 fun facts so colleagues can guess them. They lock once all 3 are saved."}</p>
     </div>`);
     facts.forEach((f, i) => fc.appendChild(h(`<div style="padding:10px 0;border-top:1px solid var(--line)">
       <div style="font-weight:600;font-size:14px">${i + 1}. ${esc(f.question)}</div>
@@ -1093,6 +1172,20 @@
     wrap.appendChild(secB);
 
     /* C — ZB facts */
+    // Announcement (pinned to top of Chat + pings everyone)
+    const curAnn = S.announcement ? S.announcement() : null;
+    const secAnn = h(`<div class="card"><div class="section-title" style="margin-top:0">📢 Pinned announcement</div>
+      <p class="muted" style="font-size:13px;margin:0 0 8px">Pins a highlighted message to the top of Chat and pings everyone's bell. Great for updates &amp; new features.</p>
+      <textarea class="input" id="ann" placeholder="e.g. New feature: you can now post photos for +50 pts!" style="min-height:70px">${curAnn ? esc(curAnn.text) : ""}</textarea>
+      <button class="btn" id="ann-pin" style="margin-top:10px">${curAnn ? "Update announcement" : "Pin announcement"}</button>
+      ${curAnn ? `<button class="btn ghost danger" id="ann-rm" style="margin-top:4px">Remove announcement</button>` : ""}</div>`);
+    secAnn.querySelector("#ann-pin").onclick = () => {
+      const t = secAnn.querySelector("#ann").value.trim(); if (!t) return toast("Write an announcement first");
+      S.setAnnouncement(t); toast("Announcement pinned ✓"); subAdmin();
+    };
+    const annRm = secAnn.querySelector("#ann-rm"); if (annRm) annRm.onclick = () => { S.clearAnnouncement(); toast("Announcement removed"); subAdmin(); };
+    wrap.appendChild(secAnn);
+
     const secC = h(`<div class="card"><div class="section-title" style="margin-top:0">ZB Fun Facts</div></div>`);
     const cb = h(`<button class="btn" style="margin-bottom:8px">+ New ZB Fact</button>`); cb.onclick = () => newZbFact(subAdmin);
     const mb = h(`<button class="btn secondary">View / delete posted facts</button>`); mb.onclick = subZbFacts;
