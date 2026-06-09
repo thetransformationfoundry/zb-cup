@@ -150,37 +150,70 @@
 
   function onbEmail() {
     root.innerHTML = "";
+    let mode = "signin"; // "signin" | "signup"
     const v = h(`<div class="onb">
       <svg class="hero-logo"></svg>
       <div class="grow">
         <h2>Welcome to ZB Cup</h2>
-        <p class="sub">Play along with the 2026 World Cup with your ZB colleagues. Pop in your work email and we'll send you a one-tap sign-in link — no password to remember.</p>
+        <p class="sub">Play along with the 2026 World Cup with your ZB colleagues. Sign in with your work email — or create an account if it's your first time.</p>
+        <div class="seg" id="o-seg" style="margin-bottom:14px">
+          <button data-m="signin">Sign in</button>
+          <button data-m="signup">Create account</button>
+        </div>
         <label class="fld">Work email</label>
         <input class="input" id="o-email" type="email" inputmode="email" placeholder="you@zimmerbiomet.com" autocomplete="email">
-        <div id="o-msg" style="font-size:13px;margin-top:12px"></div>
+        <label class="fld">Password</label>
+        <input class="input" id="o-pass" type="password" placeholder="Your password" autocomplete="current-password">
+        <button class="btn ghost" id="o-forgot" style="width:auto;padding:8px 0;margin-top:4px;font-size:14px">Forgot password?</button>
       </div>
       <div>
-        <button class="btn" id="o-send">Email me a sign-in link</button>
+        <button class="btn" id="o-go">Sign in</button>
         <div class="center" style="margin-top:10px"><button class="chip" id="o-rules" style="cursor:pointer;font-size:13px;padding:7px 14px">📖 How to play</button></div>
       </div>
     </div>`);
     v.querySelector(".hero-logo").outerHTML = logoSVG("hero-logo");
     root.appendChild(v);
+    const segBtns = root.querySelectorAll("#o-seg button");
+    const goBtn = root.querySelector("#o-go");
+    const passInput = root.querySelector("#o-pass");
+    const forgot = root.querySelector("#o-forgot");
+    const setMode = (m) => {
+      mode = m;
+      segBtns.forEach(b => b.classList.toggle("active", b.dataset.m === m));
+      goBtn.disabled = false;
+      goBtn.textContent = m === "signin" ? "Sign in" : "Create account";
+      passInput.placeholder = m === "signin" ? "Your password" : "Create a password (6+ characters)";
+      passInput.setAttribute("autocomplete", m === "signin" ? "current-password" : "new-password");
+      forgot.style.display = m === "signin" ? "" : "none";
+    };
+    setMode("signin");
+    segBtns.forEach(b => b.onclick = () => setMode(b.dataset.m));
     root.querySelector("#o-rules").onclick = showRulesModal;
-    const btn = root.querySelector("#o-send");
-    btn.onclick = () => {
+    forgot.onclick = () => {
       const email = root.querySelector("#o-email").value.trim();
+      if (!/^\S+@\S+\.\S+$/.test(email)) return toast("Type your email above first, then tap Forgot password");
+      S.resetPassword(email).then(() => toast("Password reset email sent — check your inbox"))
+        .catch(() => toast("Couldn't send a reset email — check the address"));
+    };
+    goBtn.onclick = () => {
+      const email = root.querySelector("#o-email").value.trim();
+      const pass = passInput.value;
       if (!/^\S+@\S+\.\S+$/.test(email)) return toast("Please enter a valid email");
-      btn.disabled = true; btn.textContent = "Sending…";
-      S.sendLoginLink(email).then(() => {
-        root.querySelector(".grow").innerHTML = `<h2>Check your inbox 📬</h2>
-          <p class="sub">We sent a sign-in link to <b>${esc(email)}</b>. Open that email <b>on this device</b> and tap the link to continue.</p>
-          <p class="muted" style="font-size:13px">Didn't get it? Check your spam folder. The link works once and expires after a while — just come back here to request a new one.</p>`;
-        btn.style.display = "none";
-      }).catch(e => {
-        console.error(e); btn.disabled = false; btn.textContent = "Email me a sign-in link";
-        toast("Couldn't send the link — please try again.");
-      });
+      if (pass.length < 6) return toast("Password must be at least 6 characters");
+      goBtn.disabled = true; goBtn.textContent = "Please wait…";
+      const action = mode === "signin" ? S.signInEmail(email, pass) : S.createEmail(email, pass);
+      const finish = () => { onb = null; render(); };
+      action
+        .then(() => (S.reloadMe ? S.reloadMe().then(finish) : finish()))
+        .catch(err => {
+          setMode(mode);
+          const code = (err && err.code) || "";
+          if (code === "auth/email-already-in-use") toast("That email already has an account — switch to Sign in.");
+          else if (["auth/invalid-credential", "auth/wrong-password", "auth/user-not-found"].includes(code)) toast("Wrong email or password. New here? Tap Create account.");
+          else if (code === "auth/weak-password") toast("Password too weak — use at least 6 characters.");
+          else if (code === "auth/invalid-email") toast("That email doesn't look right.");
+          else { console.error(err); toast("Couldn't sign in — please try again."); }
+        });
     };
   }
 

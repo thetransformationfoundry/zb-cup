@@ -23,7 +23,6 @@
   const now = () => Date.now();
   const uid = () => "x_" + Math.random().toString(36).slice(2, 10);
   const adminEmails = (window.ZB_CONFIG.ADMIN_EMAILS || []).map(e => e.toLowerCase());
-  const EMAILKEY = "zb_emailForLink";
 
   // ---- in-memory cache (mirrors demo store shape) ----
   const cache = {
@@ -94,20 +93,8 @@
 
   function me() { return cache.users[cache.uid] || null; }
 
-  // ---- ready promise: resolves once auth state (and any incoming link) is handled ----
+  // ---- ready promise: resolves once auth state is known ----
   const ready = new Promise(resolve => {
-    // 1) If we arrived by tapping the magic link in an email, complete sign-in.
-    if (auth.isSignInWithEmailLink(window.location.href)) {
-      let email = window.localStorage.getItem(EMAILKEY);
-      if (!email) email = window.prompt("Confirm your email to finish signing in:");
-      if (email) {
-        auth.signInWithEmailLink(email, window.location.href)
-          .then(() => { window.localStorage.removeItem(EMAILKEY); })
-          .catch(e => { console.error("link sign-in failed", e); alert("That sign-in link is invalid or expired — please request a new one."); })
-          .finally(() => { history.replaceState(null, "", window.location.pathname); });
-      }
-    }
-    // 2) Track auth state.
     auth.onAuthStateChanged(user => {
       if (user) {
         cache.uid = user.uid; cache.authEmail = user.email; cache.authed = true;
@@ -138,11 +125,16 @@
     isAdmin() { const u = me(); return !!(u && u.isAdmin); },
     authed() { return cache.authed; },
     pendingEmail() { return cache.authEmail || null; },
-    // Send the one-tap sign-in link to the user's email.
-    sendLoginLink(email) {
-      const acs = { url: window.location.origin + window.location.pathname, handleCodeInApp: true };
-      window.localStorage.setItem(EMAILKEY, email);
-      return auth.sendSignInLinkToEmail(email, acs);
+    // Email + password auth. Returns promises; the UI handles success/errors.
+    signInEmail(email, password) { return auth.signInWithEmailAndPassword(email, password); },
+    createEmail(email, password) { return auth.createUserWithEmailAndPassword(email, password); },
+    resetPassword(email) { return auth.sendPasswordResetEmail(email); },
+    // Load my own profile doc now (so returning sign-ins land straight on the app).
+    reloadMe() {
+      if (!cache.uid) return Promise.resolve();
+      return db.collection("users").doc(cache.uid).get()
+        .then(d => { if (d && d.exists) cache.users[cache.uid] = Object.assign({ id: d.id }, d.data()); })
+        .catch(() => {});
     },
     signUp({ name }) {
       const id = cache.uid;
