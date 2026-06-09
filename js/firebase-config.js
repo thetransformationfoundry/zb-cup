@@ -23,7 +23,8 @@ window.ZB_CONFIG = {
 
   // Anyone signing in with one of these emails gets admin powers.
   ADMIN_EMAILS: [
-    "donnae.abbood@zimmerbiomet.com"  // Donnae — app admin
+    "donnae.abbood@zimmerbiomet.com",        // Donnae — app admin
+    "sean.abbood@thetransformationfoundry.nl" // Sean — admin
   ],
 
   tournamentName: "2026 FIFA World Cup"

@@ -9,7 +9,7 @@
 (function () {
   // Bump this version whenever the seed/demo data changes (e.g. new fixtures).
   // Changing it makes the app discard old cached demo data and re-seed fresh.
-  const KEY = "zbcup_v6";
+  const KEY = "zbcup_v7";
   const todayKey = () => new Date().toISOString().slice(0, 10);
   const uid = () => "u_" + Math.random().toString(36).slice(2, 9);
   const now = () => Date.now();
@@ -25,6 +25,7 @@
       posts: [],
       zbFacts: [],
       notifications: [],
+      bugReports: [],
       announcement: null,
       tournament: { winnerCountryCode: null }
     };
@@ -187,8 +188,9 @@
       const correct = optionIndex === fact.answerIndex;
       s.guesses.push({ guesserId: me.id, targetUserId, factId, dateKey: todayKey(), correct });
       if (correct) {
-        // +20 pts and a 👑 crown for the GUESSER (crown = facts you've cracked)
-        me.points += 20; me.crowns = (me.crowns || 0) + 1;
+        // +20 pts for the guesser; the TARGET earns a 👑 (their fact got figured out)
+        me.points += 20;
+        const target = s.users[targetUserId]; if (target) target.crowns = (target.crowns || 0) + 1;
         notify(targetUserId, "guess", `${me.name} guessed one of your fun facts!`);
       }
       save();
@@ -233,15 +235,16 @@
     posts() { return get().posts.slice().sort((a, b) => a.createdAt - b.createdAt); },
     goalers(postId) {
       const s = get(); const p = s.posts.find(x => x.id === postId); if (!p) return [];
-      return (p.goaledBy || []).map(id => (s.users[id] || {}).name || "Someone");
+      return (p.goaledBy || []).map(id => { const u = s.users[id] || {}; return { name: u.name || "Someone", photoURL: u.photoURL || null }; });
     },
     addPost(text, imageURL) {
       const me = this.currentUser(); const s = get();
       if (me.blocked) return { error: "You've been blocked from posting by the admin." };
+      if (imageURL && me.lastPhotoBonus === todayKey()) return { error: "You can post one photo per day — try again tomorrow!" };
       s.posts.push({ id: uid(), authorId: me.id, authorName: me.name,
         authorPhoto: me.photoURL, text: text || "", imageURL: imageURL || null, goals: 0, goaledBy: [], createdAt: now(), replies: [] });
       let bonus = 0;
-      if (imageURL && me.lastPhotoBonus !== todayKey()) { bonus = 50; me.points = (me.points || 0) + 50; me.lastPhotoBonus = todayKey(); }
+      if (imageURL) { bonus = 50; me.points = (me.points || 0) + 50; me.lastPhotoBonus = todayKey(); }
       save();
       return { ok: true, bonus };
     },
@@ -278,7 +281,11 @@
       save();
     },
     deletePost(postId) {
-      const s = get(); s.posts = s.posts.filter(p => p.id !== postId); save();
+      const s = get(); const p = s.posts.find(x => x.id === postId);
+      if (p && p.imageURL && p.authorId) {
+        const a = s.users[p.authorId]; if (a) { a.points = Math.max(0, (a.points || 0) - 50); a.lastPhotoBonus = ""; }
+      }
+      s.posts = s.posts.filter(x => x.id !== postId); save();
     },
 
     /* --- notifications --- */
@@ -294,6 +301,13 @@
       const s = get(); const me = this.currentUser(); if (!me) return;
       (s.notifications || []).forEach(n => { if (n.userId === me.id) n.read = true; });
       save();
+    },
+    clearNotifications() {
+      const s = get(); const me = this.currentUser(); if (!me) return;
+      s.notifications = (s.notifications || []).filter(n => n.userId !== me.id); save();
+    },
+    resetCrowns() {
+      const s = get(); Object.values(s.users).forEach(u => u.crowns = 0); save();
     },
 
     /* --- users: admin block/unblock --- */
@@ -331,6 +345,17 @@
       save();
     },
     deleteZbFact(id) { const s = get(); s.zbFacts = s.zbFacts.filter(f => f.id !== id); save(); },
+
+    /* --- bug reports --- */
+    submitBug(text, imageURL) {
+      const s = get(); const me = this.currentUser(); if (!me) return { error: "Not signed in" };
+      (s.bugReports = s.bugReports || []).push({ id: uid(), userId: me.id, name: me.name, email: me.email || "", text, imageURL: imageURL || null, createdAt: now(), resolved: false });
+      Object.values(s.users).filter(x => x.isAdmin && x.id !== me.id).forEach(a => notify(a.id, "bug", `${me.name} reported a bug 🐞`));
+      save(); return { ok: true };
+    },
+    bugReportsLoad() { return Promise.resolve(); },
+    bugReports() { return (get().bugReports || []).slice().sort((a, b) => b.createdAt - a.createdAt); },
+    resolveBug(id) { const s = get(); s.bugReports = (s.bugReports || []).filter(b => b.id !== id); save(); return Promise.resolve(); },
 
     /* --- announcement (admin pinned post) --- */
     announcement() { return get().announcement; },

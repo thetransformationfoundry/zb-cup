@@ -36,6 +36,7 @@
     posts: [],                 // chat posts
     zbFacts: [],
     notifications: [],         // my in-app notifications
+    bugReports: [],            // loaded on demand (admin only)
     announcement: null,        // pinned admin announcement
     tournament: { winnerCountryCode: null }
   };
@@ -225,9 +226,11 @@
       cache.guessesMine.push(g);                               // optimistic
       db.collection("guesses").doc(g.id).set(g);
       if (correct) {
-        // +20 pts and a 👑 crown for the GUESSER (crown = facts you've cracked)
-        u.points = (u.points || 0) + 20; u.crowns = (u.crowns || 0) + 1;
-        db.collection("users").doc(u.id).update({ points: FV.increment(20), crowns: FV.increment(1) });
+        // +20 pts for the guesser; the TARGET earns a 👑 (their fact got figured out)
+        u.points = (u.points || 0) + 20;
+        db.collection("users").doc(u.id).update({ points: FV.increment(20) });
+        const t = cache.users[targetUserId]; if (t) t.crowns = (t.crowns || 0) + 1;
+        db.collection("users").doc(targetUserId).update({ crowns: FV.increment(1) });
         notify(targetUserId, "guess", `${u.name} guessed one of your fun facts!`);
       }
       refresh();
@@ -279,17 +282,17 @@
 
     /* --- chat --- */
     posts() { return cache.posts.slice().sort((a, b) => a.createdAt - b.createdAt); },
-    goalers(postId) { // names of people who gave a Goal
+    goalers(postId) { // people who gave a Goal (in order given)
       const p = cache.posts.find(x => x.id === postId); if (!p) return [];
-      return (p.goaledBy || []).map(id => (cache.users[id] || {}).name || "Someone");
+      return (p.goaledBy || []).map(id => { const u = cache.users[id] || {}; return { name: u.name || "Someone", photoURL: u.photoURL || null }; });
     },
     addPost(text, imageURL) {
       const u = me(); if (u.blocked) return { error: "You've been blocked from posting by the admin." };
+      if (imageURL && u.lastPhotoBonus === todayKey()) return { error: "You can post one photo per day — try again tomorrow!" };
       const p = { authorId: u.id, authorName: u.name, authorPhoto: u.photoURL || null, text: text || "", imageURL: imageURL || null, goals: 0, goaledBy: [], replies: [], createdAt: now() };
       db.collection("posts").add(p);
-      // photo bonus: +50 pts, max once per day
       let bonus = 0;
-      if (imageURL && u.lastPhotoBonus !== todayKey()) {
+      if (imageURL) { // one photo/day → always the +50 bonus
         bonus = 50; u.points = (u.points || 0) + 50; u.lastPhotoBonus = todayKey();
         db.collection("users").doc(u.id).update({ points: FV.increment(50), lastPhotoBonus: todayKey() });
       }
@@ -305,7 +308,16 @@
       });
       if (!on) notify(p.authorId, "goal", `${u.name} gave your post a Goal ⚽`);
     },
-    deletePost(postId) { db.collection("posts").doc(postId).delete(); },
+    deletePost(postId) {
+      const p = cache.posts.find(x => x.id === postId);
+      db.collection("posts").doc(postId).delete();
+      // deleting a photo post claws back the +50 bonus (anti-farming + admin moderation)
+      if (p && p.imageURL && p.authorId) {
+        const a = cache.users[p.authorId]; if (a) a.points = Math.max(0, (a.points || 0) - 50);
+        db.collection("users").doc(p.authorId).update({ points: FV.increment(-50), lastPhotoBonus: "" });
+        refresh();
+      }
+    },
     addReply(postId, text) {
       const u = me(); if (u.blocked) return { error: "You've been blocked from posting by the admin." };
       const p = cache.posts.find(x => x.id === postId);
@@ -347,6 +359,13 @@
       batch.commit().catch(() => {});
       refresh();
     },
+    clearNotifications() {
+      const batch = db.batch();
+      cache.notifications.forEach(n => batch.delete(db.collection("notifications").doc(n.id)));
+      cache.notifications = [];
+      batch.commit().catch(() => {});
+      refresh();
+    },
 
     /* --- users: admin block --- */
     toggleBlock(userId) {
@@ -354,6 +373,13 @@
       const v = !u.blocked; u.blocked = v;
       db.collection("users").doc(userId).update({ blocked: v });
       refresh(); return v;
+    },
+    // ADMIN: zero everyone's crowns (clean start after the meaning changed)
+    resetCrowns() {
+      const batch = db.batch();
+      Object.values(cache.users).forEach(u => { u.crowns = 0; batch.update(db.collection("users").doc(u.id), { crowns: 0 }); });
+      batch.commit().catch(() => {});
+      refresh();
     },
 
     /* --- ZB facts --- */
@@ -368,6 +394,21 @@
       db.collection("zbFacts").add({ title, body, imageURL: imageURL || null, linkURL: linkURL || null, createdAt: now(), createdBy: cache.uid });
     },
     deleteZbFact(id) { db.collection("zbFacts").doc(id).delete(); },
+
+    /* --- bug reports --- */
+    submitBug(text, imageURL) {
+      const u = me(); if (!u) return { error: "Not signed in" };
+      db.collection("bugReports").add({ userId: u.id, name: u.name, email: u.email || "", text, imageURL: imageURL || null, createdAt: now(), resolved: false });
+      Object.values(cache.users).filter(x => x.isAdmin && x.id !== u.id).forEach(a => notify(a.id, "bug", `${u.name} reported a bug 🐞`));
+      return { ok: true };
+    },
+    bugReportsLoad() { // admin: fetch on demand (non-admins can't read these)
+      return db.collection("bugReports").orderBy("createdAt", "desc").get()
+        .then(s => { cache.bugReports = s.docs.map(d => Object.assign({ id: d.id }, d.data())); refresh(); })
+        .catch(() => {});
+    },
+    bugReports() { return cache.bugReports || []; },
+    resolveBug(id) { return db.collection("bugReports").doc(id).delete().then(() => this.bugReportsLoad()).catch(() => {}); },
 
     /* --- announcement (admin pinned post) --- */
     announcement() { return cache.announcement; },
