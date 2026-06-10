@@ -1471,8 +1471,12 @@
     const secD = h(`<div class="card"><div class="section-title" style="margin-top:0">Players</div><div id="pl"></div></div>`);
     const pl = secD.querySelector("#pl");
     S.allUsers().forEach(u => {
+      // Empty account (0 pts, no country, no facts) — either brand-new or possibly reset. Worth a look.
+      const looksEmpty = !(u.points) && !u.country && S.factsFor(u.id).length === 0;
       const row = h(`<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">${avatar(u, "sm")}
-        <span style="flex:1;font-weight:600;font-size:14px">${esc(u.name)} <span class="muted" style="font-weight:600">· ${u.points || 0} pts</span> ${u.blocked ? `<span class="chip" style="background:#FBEBEB;color:var(--bad)">blocked</span>` : ""}</span>
+        <span style="flex:1;font-weight:600;font-size:14px">${esc(u.name)} <span class="muted" style="font-weight:600">· ${u.points || 0} pts</span>
+          ${looksEmpty ? `<span class="chip gold" title="No points, country or fun facts — likely a new player, but check it wasn't reset">⚠️ check</span>` : ""}
+          ${u.blocked ? `<span class="chip" style="background:#FBEBEB;color:var(--bad)">blocked</span>` : ""}</span>
         <button class="btn ghost sm edit-p" style="width:auto;padding:4px 8px">Edit</button>
         <button class="btn ${u.blocked ? "secondary" : "danger"} sm block-p" style="width:auto">${u.blocked ? "Unblock" : "Block"}</button></div>`);
       row.querySelector(".block-p").onclick = () => { S.toggleBlock(u.id); subAdmin(); };
