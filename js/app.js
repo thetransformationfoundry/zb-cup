@@ -690,23 +690,37 @@
     // 🌟 Colleague Highlight of the Day
     const cotd = S.colleagueOfTheDay ? S.colleagueOfTheDay() : null;
     if (cotd) {
+      const claps = cotd.claps || 0;
+      const clapsLine = claps > 0
+        ? `<button class="cotd-who" style="display:flex;align-items:center;gap:8px;background:none;border:none;cursor:pointer;padding:8px 0 0;margin:0;width:auto"><span style="display:inline-flex">${goalPreview(S.cotdClappers ? S.cotdClappers() : [])}</span><span class="muted" style="font-size:13px;font-weight:600">${claps} celebration${claps === 1 ? "" : "s"} 👏</span></button>`
+        : "";
       if (cotd.id === me.id) {
-        wrap.appendChild(h(`<div class="card" style="background:linear-gradient(135deg,#fff,#FBF3D7)">
+        const c = h(`<div class="card" style="background:linear-gradient(135deg,#fff,#FBF3D7)">
           <span class="chip gold" style="margin-bottom:8px">🌟 Colleague of the Day</span>
           <div style="font-weight:700;font-size:16px;margin:6px 0 4px">It's you today! 🎉</div>
-          <div class="muted" style="color:var(--ink);font-size:14px">You're in the spotlight — colleagues are getting to know you. Sit back and watch the guesses roll in!</div>
-        </div>`));
+          <div class="muted" style="color:var(--ink);font-size:14px">You're in the spotlight — colleagues are getting to know you${claps > 0 ? " and celebrating you" : ""}! Sit back and enjoy. 🙌</div>
+          ${clapsLine}
+        </div>`);
+        const who = c.querySelector(".cotd-who"); if (who) who.onclick = () => showPeopleList("👏 Celebrations", S.cotdClappers());
+        wrap.appendChild(c);
       } else {
-        const done = S.factsFor(cotd.id).every(f => S.alreadyCorrect(cotd.id, f.id)) && S.factsFor(cotd.id).length > 0;
+        const done = S.factsFor(cotd.id).length > 0 && S.factsFor(cotd.id).every(f => S.alreadyCorrect(cotd.id, f.id));
+        const iClapped = (cotd.clappedBy || []).includes(me.id);
         const card = h(`<div class="card" style="background:linear-gradient(135deg,#fff,#FBF3D7)">
           <span class="chip gold" style="margin-bottom:8px">🌟 Colleague of the Day</span>
           <div class="row" style="gap:12px;margin:8px 0">${avatar(cotd, "lg")}
             <div><div style="font-weight:700;font-size:17px">${esc(cotd.name)}</div>
             <div class="muted" style="font-size:13px">${done ? "You've guessed all their facts ✅" : "3 fun facts to guess"}</div></div></div>
           <div class="muted" style="color:var(--ink);font-size:14px;margin-bottom:10px">Get to know <b>${esc(cotd.name)}</b>, beyond their awesomeness we already know! Give their fun facts a go 👇</div>
-          <button class="btn" id="cotd-go">${done ? "See their facts" : "Guess " + esc(cotd.name.split(" ")[0]) + "'s facts"}</button>
+          <div class="row" style="gap:8px">
+            <button class="btn" id="cotd-go" style="flex:1">${done ? "See their facts" : "Guess " + esc(cotd.name.split(" ")[0]) + "'s facts"}</button>
+            <button class="btn ${iClapped ? "" : "secondary"}" id="cotd-clap" style="width:auto;font-size:18px" title="Celebrate ${esc(cotd.name.split(" ")[0])}">👏</button>
+          </div>
+          ${clapsLine}
         </div>`);
         card.querySelector("#cotd-go").onclick = () => guessPerson(cotd);
+        card.querySelector("#cotd-clap").onclick = () => { S.celebrateCotd(); toast(iClapped ? "Celebration removed" : "You celebrated " + cotd.name.split(" ")[0] + "! 👏"); viewFacts(); };
+        const who = card.querySelector(".cotd-who"); if (who) who.onclick = () => showPeopleList("👏 Celebrations", S.cotdClappers());
         wrap.appendChild(card);
       }
     }
@@ -837,7 +851,7 @@
 
   function openNotifications() {
     const items = S.notifications ? S.notifications() : [];
-    const icon = t => t === "guess" ? "👑" : t === "reply" ? "💬" : t === "announcement" ? "📢" : t === "bug" ? "🐞" : "⚽";
+    const icon = t => t === "guess" ? "👑" : t === "reply" ? "💬" : t === "announcement" ? "📢" : t === "bug" ? "🐞" : t === "celebrate" ? "👏" : "⚽";
     const bg = modal(`<h3>Notifications</h3>
       <div style="max-height:60vh;overflow-y:auto">
         ${items.length ? items.map(n => `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
@@ -854,6 +868,13 @@
       S.markAllRead();
       const b = document.getElementById("my-badge"); if (b) b.style.display = "none";
     }
+  }
+
+  function showPeopleList(title, list) {
+    const bg = modal(`<h3>${title}</h3>${(list && list.length)
+      ? `<div style="max-height:55vh;overflow-y:auto">${list.slice().reverse().map(u => `<div class="row" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">${avatar(u, "sm")}<span style="font-weight:600">${esc(u.name)}</span></div>`).join("")}</div>`
+      : `<p class="muted">No one yet.</p>`}<button class="btn" id="x" style="margin-top:14px">Close</button>`);
+    bg.querySelector("#x").onclick = () => bg.remove();
   }
 
   function showGoalers(postId) {
@@ -876,15 +897,23 @@
       const long = full.length > 160 || (full.match(/\n/g) || []).length > 2;
       const shown = annExpanded || !long;
       const body = shown ? full : full.slice(0, 150).replace(/\s+\S*$/, "") + "…";
+      const annGoals = ann.goals || 0;
+      const annOn = (ann.goaledBy || []).includes(me.id);
       const card = h(`<div class="card" style="background:linear-gradient(135deg,#ffffff,var(--zb-blue-soft));border-color:var(--zb-blue)">
         <div class="row between" style="margin-bottom:6px"><span class="chip">📢 Announcement</span>
           ${S.isAdmin() ? `<button class="ann-clear btn ghost" style="width:auto;padding:0;font-size:12px">Remove</button>` : ""}</div>
         <div style="white-space:pre-wrap">${esc(body)}</div>
         ${long ? `<button class="ann-toggle btn ghost" style="width:auto;padding:6px 0;font-size:13px">${shown ? "Show less" : "Expand"}</button>` : ""}
         <div class="muted" style="font-size:12px;margin-top:4px">${esc(ann.byName || "Admin")} · ${timeAgo(ann.createdAt)} ago</div>
+        <div class="row" style="gap:14px;margin-top:8px;align-items:center">
+          <button class="ann-goal goal-btn ${annOn ? "on" : ""}">${I.ball}<span>${annOn ? "Goaled" : "Goal"}</span></button>
+          ${annGoals > 0 ? `<button class="ann-who" style="display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:0;font-size:13px;font-weight:600;color:var(--muted)"><span style="display:inline-flex">${goalPreview(S.announcementGoalers ? S.announcementGoalers() : [])}</span>${annGoals} Goal${annGoals === 1 ? "" : "s"}</button>` : ""}
+        </div>
       </div>`);
       const tg = card.querySelector(".ann-toggle"); if (tg) tg.onclick = () => { annExpanded = !annExpanded; viewChat(); };
       const clr = card.querySelector(".ann-clear"); if (clr) clr.onclick = () => { S.clearAnnouncement(); viewChat(); };
+      card.querySelector(".ann-goal").onclick = () => { S.toggleAnnouncementGoal(); viewChat(); };
+      const aw = card.querySelector(".ann-who"); if (aw) aw.onclick = () => showPeopleList(`${I.ball} Goals`, S.announcementGoalers());
       feed.appendChild(card);
     }
     const blockedIds = new Set(S.allUsers().filter(u => u.blocked).map(u => u.id));
@@ -895,6 +924,7 @@
       const goals = p.goals || 0;
       const on = (p.goaledBy || []).includes(me.id);
       const replies = (p.replies || []).filter(r => !blockedIds.has(r.authorId));
+      const repsOpen = replies.length && expandedReplies.has(p.id);
       const post = h(`<div class="post">${avatar({ name: p.authorName, photoURL: p.authorPhoto }, "sm")}
         <div class="body">
           <div class="meta"><b style="color:var(--ink)">${esc(p.authorName)}</b><span>· ${timeAgo(p.createdAt)}</span>
@@ -903,11 +933,12 @@
           ${p.imageURL ? `<img src="${esc(p.imageURL)}" alt="photo" style="width:100%;border-radius:12px;margin-top:8px">` : ""}
           <div class="row" style="gap:16px;margin-top:8px;flex-wrap:wrap">
             <button class="goal-btn ${on ? "on" : ""}">${I.ball}<span>${on ? "Goaled" : "Goal"}</span></button>
+            ${!repsOpen ? `<button class="reply-btn goal-btn">💬 <span>Reply</span></button>` : ""}
             ${replies.length ? `<button class="toggle-btn goal-btn"><span>${expandedReplies.has(p.id) ? "Hide replies" : "View " + replies.length + " repl" + (replies.length === 1 ? "y" : "ies")}</span></button>` : ""}
           </div>
           ${goals > 0 ? `<button class="goalers-btn" style="display:flex;align-items:center;gap:8px;background:none;border:none;cursor:pointer;padding:8px 0 0;margin:0;width:auto"><span style="display:inline-flex" class="gp"></span><span class="muted" style="font-size:13px;font-weight:600">${goals} Goal${goals === 1 ? "" : "s"} given</span></button>` : ""}
           <div class="replies"></div>
-          <div class="reply-row" style="display:flex;justify-content:flex-end;margin-top:8px"><button class="reply-btn goal-btn">💬 <span>Reply</span></button></div>
+          ${repsOpen ? `<div class="reply-row" style="display:flex;justify-content:flex-end;margin-top:8px"><button class="reply-btn goal-btn">💬 <span>Reply</span></button></div>` : ""}
           <div class="reply-box" style="display:none"></div>
         </div></div>`);
       post.querySelector(".goal-btn").onclick = () => { S.toggleGoal(p.id); viewChat(); };

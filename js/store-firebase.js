@@ -37,6 +37,7 @@
     zbFacts: [],
     notifications: [],         // my in-app notifications
     bugReports: [],            // loaded on demand (admin only)
+    cotd: null,                // today's Colleague of the Day record
     announcement: null,        // pinned admin announcement
     tournament: { winnerCountryCode: null }
   };
@@ -57,6 +58,32 @@
     });
   }
 
+  // ---- Colleague of the Day: claim today's pick if not set ----
+  let cotdClaimTried = null;
+  function maybeClaimCotd() {
+    const key = todayKey();
+    if (cotdClaimTried === key) return;          // already tried this session/day
+    if (cache.cotd && cache.cotd.dateKey === key) { cotdClaimTried = key; return; }
+    if (!Object.keys(cache.users).length) return; // need users loaded first
+    cotdClaimTried = key;
+    const eligible = () => Object.values(cache.users).filter(u => (u.facts || []).length >= 1);
+    const ref = db.doc("cotd/" + key);
+    const hist = db.doc("cotd/_history");
+    db.runTransaction(t => t.get(ref).then(d => {
+      if (d.exists) return;                        // already claimed by someone
+      return t.get(hist).then(hd => {
+        const ids = (hd.exists && hd.data().ids) || [];
+        let pool = eligible().filter(u => !ids.includes(u.id));
+        let newIds = ids;
+        if (!pool.length) { pool = eligible(); newIds = []; } // everyone featured → reset cycle
+        if (!pool.length) return;                  // nobody has facts yet
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        t.set(ref, { userId: pick.id, name: pick.name, photoURL: pick.photoURL || null, dateKey: key, claps: 0, clappedBy: [], createdAt: now() });
+        t.set(hist, { ids: newIds.concat(pick.id) });
+      });
+    })).catch(() => { cotdClaimTried = null; });    // allow a retry on failure
+  }
+
   // ---- listeners (attached once, after auth) ----
   let listenersOn = false;
   function attachListeners() {
@@ -66,6 +93,12 @@
       s.forEach(d => { u[d.id] = Object.assign({ id: d.id }, d.data()); });
       cache.users = u;
       ensureAdmin();
+      maybeClaimCotd();
+      refresh();
+    });
+    db.doc("cotd/" + todayKey()).onSnapshot(d => {
+      cache.cotd = d.exists ? d.data() : null;
+      if (!cache.cotd) maybeClaimCotd();
       refresh();
     });
     // only the most recent 60 posts — keeps bandwidth (egress) low as the feed grows
@@ -402,13 +435,25 @@
       const dayIndex = Math.floor(new Date(todayKey()).getTime() / 86400000);
       return facts[dayIndex % facts.length];
     },
-    // one featured colleague per day (same for everyone), among users who've set facts
+    // today's featured colleague (persisted, random, no repeats until everyone's featured)
     colleagueOfTheDay() {
-      const list = Object.values(cache.users).filter(u => (u.facts || []).length >= 1)
-        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-      if (!list.length) return null;
-      const dayIndex = Math.floor(new Date(todayKey()).getTime() / 86400000);
-      return list[dayIndex % list.length];
+      if (!cache.cotd) return null;
+      const u = cache.users[cache.cotd.userId]; if (!u) return null;
+      return Object.assign({}, u, { claps: cache.cotd.claps || 0, clappedBy: cache.cotd.clappedBy || [] });
+    },
+    celebrateCotd() {
+      const u = me(); if (!u || !cache.cotd || cache.cotd.userId === u.id) return;
+      const key = todayKey();
+      const on = (cache.cotd.clappedBy || []).includes(u.id);
+      db.doc("cotd/" + key).update({
+        clappedBy: on ? FV.arrayRemove(u.id) : FV.arrayUnion(u.id),
+        claps: FV.increment(on ? -1 : 1)
+      });
+      if (!on) notify(cache.cotd.userId, "celebrate", `${u.name} celebrated you as Colleague of the Day 👏`);
+    },
+    cotdClappers() {
+      if (!cache.cotd) return [];
+      return (cache.cotd.clappedBy || []).map(id => { const x = cache.users[id] || {}; return { name: x.name || "Someone", photoURL: x.photoURL || null }; });
     },
     addZbFact({ title, body, imageURL, linkURL }) {
       db.collection("zbFacts").add({ title, body, imageURL: imageURL || null, linkURL: linkURL || null, createdAt: now(), createdBy: cache.uid });
@@ -432,8 +477,17 @@
 
     /* --- announcement (admin pinned post) --- */
     announcement() { return cache.announcement; },
+    toggleAnnouncementGoal() {
+      const u = me(); if (!u || !cache.announcement) return;
+      const on = (cache.announcement.goaledBy || []).includes(u.id);
+      db.doc("tournament/announcement").update({ goaledBy: on ? FV.arrayRemove(u.id) : FV.arrayUnion(u.id), goals: FV.increment(on ? -1 : 1) });
+    },
+    announcementGoalers() {
+      if (!cache.announcement) return [];
+      return (cache.announcement.goaledBy || []).map(id => { const x = cache.users[id] || {}; return { name: x.name || "Someone", photoURL: x.photoURL || null }; });
+    },
     setAnnouncement(text) {
-      db.doc("tournament/announcement").set({ text, byName: (me() || {}).name || "Admin", createdAt: now() });
+      db.doc("tournament/announcement").set({ text, byName: (me() || {}).name || "Admin", createdAt: now(), goals: 0, goaledBy: [] });
       // ping everyone's bell
       const batch = db.batch();
       Object.keys(cache.users).forEach(id => {

@@ -26,6 +26,8 @@
       zbFacts: [],
       notifications: [],
       bugReports: [],
+      cotd: null,
+      cotdHistory: [],
       announcement: null,
       tournament: { winnerCountryCode: null }
     };
@@ -344,12 +346,31 @@
       return facts[dayIndex % facts.length];
     },
     colleagueOfTheDay() {
-      const s = get();
-      const list = Object.values(s.users).filter(u => (s.facts[u.id] || []).length >= 1)
-        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-      if (!list.length) return null;
-      const dayIndex = Math.floor(new Date(todayKey()).getTime() / 86400000);
-      return list[dayIndex % list.length];
+      const s = get(); const today = todayKey();
+      if (!s.cotd || s.cotd.dateKey !== today) {
+        const elig = Object.values(s.users).filter(u => (s.facts[u.id] || []).length >= 1);
+        let pool = elig.filter(u => !(s.cotdHistory || []).includes(u.id));
+        if (!pool.length) { pool = elig; s.cotdHistory = []; }
+        if (!pool.length) return null;
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        s.cotd = { dateKey: today, userId: pick.id, claps: 0, clappedBy: [] };
+        s.cotdHistory = (s.cotdHistory || []).concat(pick.id);
+        save();
+      }
+      const u = s.users[s.cotd.userId]; if (!u) return null;
+      return Object.assign({}, u, { claps: s.cotd.claps || 0, clappedBy: s.cotd.clappedBy || [] });
+    },
+    celebrateCotd() {
+      const s = get(); const me = this.currentUser();
+      if (!s.cotd || !me || s.cotd.userId === me.id) return;
+      const i = s.cotd.clappedBy.indexOf(me.id);
+      if (i >= 0) { s.cotd.clappedBy.splice(i, 1); s.cotd.claps--; }
+      else { s.cotd.clappedBy.push(me.id); s.cotd.claps++; notify(s.cotd.userId, "celebrate", `${me.name} celebrated you as Colleague of the Day 👏`); }
+      save();
+    },
+    cotdClappers() {
+      const s = get(); if (!s.cotd) return [];
+      return (s.cotd.clappedBy || []).map(id => { const x = s.users[id] || {}; return { name: x.name || "Someone", photoURL: x.photoURL || null }; });
     },
     addZbFact({ title, body, imageURL, linkURL }) {
       const s = get();
@@ -371,9 +392,21 @@
 
     /* --- announcement (admin pinned post) --- */
     announcement() { return get().announcement; },
+    toggleAnnouncementGoal() {
+      const s = get(); const me = this.currentUser(); if (!s.announcement || !me) return;
+      s.announcement.goaledBy = s.announcement.goaledBy || [];
+      const i = s.announcement.goaledBy.indexOf(me.id);
+      if (i >= 0) { s.announcement.goaledBy.splice(i, 1); s.announcement.goals = (s.announcement.goals || 0) - 1; }
+      else { s.announcement.goaledBy.push(me.id); s.announcement.goals = (s.announcement.goals || 0) + 1; }
+      save();
+    },
+    announcementGoalers() {
+      const s = get(); if (!s.announcement) return [];
+      return (s.announcement.goaledBy || []).map(id => { const x = s.users[id] || {}; return { name: x.name || "Someone", photoURL: x.photoURL || null }; });
+    },
     setAnnouncement(text) {
       const s = get(); const me = this.currentUser();
-      s.announcement = { text, byName: me ? me.name : "Admin", createdAt: now() };
+      s.announcement = { text, byName: me ? me.name : "Admin", createdAt: now(), goals: 0, goaledBy: [] };
       Object.values(s.users).forEach(u => { if (!me || u.id !== me.id) { (s.notifications = s.notifications || []).push({ id: uid(), userId: u.id, type: "announcement", text: "📢 " + text.slice(0, 90), fromName: me ? me.name : "Admin", createdAt: now(), read: false }); } });
       save();
     },
