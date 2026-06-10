@@ -258,3 +258,32 @@ textarea.input { resize: vertical; min-height: 80px; }
 .toast { position: fixed; bottom: calc(var(--tab-h) + env(safe-area-inset-bottom, 0px) + 16px); left: 50%; transform: translateX(-50%);
   background: var(--ink); color: #fff; padding: 11px 18px; border-radius: 999px; font-size: 14px; font-weight: 600;
   z-index: 60; box-shadow: var(--shadow-lg); animation: fade .2s; max-width: 90%; }
+
+/* ---------- match supporters (who's backing who) ---------- */
+.sup-wrap { margin-top: 12px; }
+.sup-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; text-align: center; margin-bottom: 8px; }
+.sup-loading, .sup-empty { font-size: 13px; text-align: center; padding: 6px 0; }
+.sup-reveal { color: var(--zb-blue); }
+.supporters { display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 8px; }
+.sup-col { background: none; border: none; cursor: pointer; font-family: inherit; display: flex; flex-direction: column;
+  align-items: center; gap: 5px; padding: 6px 4px; border-radius: 12px; transition: background .12s; min-width: 0; }
+.sup-col[data-side="draw"] { padding-left: 8px; padding-right: 8px; }
+.sup-col:not(:disabled):hover { background: var(--bg); }
+.sup-col:disabled { cursor: default; }
+.sup-label { font-size: 11px; font-weight: 600; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sup-faces-row { display: flex; align-items: center; gap: 6px; min-height: 26px; }
+.sup-count { font-weight: 700; font-size: 13px; color: var(--ink); }
+.sup-none { font-size: 14px; }
+
+/* ---------- live now ---------- */
+.live-chip { background: var(--bad); color: #fff; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+.live-chip.on { box-shadow: 0 0 0 2px rgba(214,69,69,.35); }
+.live-banner { background: #FBE9E9; color: var(--bad); cursor: pointer; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; flex: 0 0 auto; animation: livepulse 1.4s infinite; }
+.live-dot.solid { background: var(--bad); }
+@keyframes livepulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255,255,255,.7); }
+  70%  { box-shadow: 0 0 0 6px rgba(255,255,255,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); }
+}
+.live-banner .live-dot { animation: none; }

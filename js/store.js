@@ -9,7 +9,7 @@
 (function () {
   // Bump this version whenever the seed/demo data changes (e.g. new fixtures).
   // Changing it makes the app discard old cached demo data and re-seed fresh.
-  const KEY = "zbcup_v7";
+  const KEY = "zbcup_v8";
   const todayKey = () => new Date().toISOString().slice(0, 10);
   const uid = () => "u_" + Math.random().toString(36).slice(2, 9);
   const now = () => Date.now();
@@ -109,6 +109,17 @@
       { id: uid(), title: "Did you know?", body: "Zimmer Biomet's brand blue is #0079BD — you'll spot it across our products and this app.", imageURL: null, createdAt: now() - 86400000 },
       { id: uid(), title: "ZB around the world", body: "Zimmer Biomet operates in more than 25 countries — almost a World Cup of its own!", imageURL: null, createdAt: now() - 43200000 }
     ];
+
+    // A few sample predictions so the "who's backing who" supporters show in the demo preview.
+    const seedPreds = (fxId, picks) => {
+      s.predictions[fxId] = s.predictions[fxId] || {};
+      picks.forEach(([idx, winner, scoreA, scoreB]) => {
+        if (ids[idx]) s.predictions[fxId][ids[idx]] = { winner, scoreA, scoreB, pointsAwarded: null };
+      });
+    };
+    seedPreds("m1",  [[0, "A", 2, 0], [1, "A", 1, 0], [2, "B", 0, 1], [3, "draw", 1, 1]]); // Mexico v South Africa
+    seedPreds("m31", [[0, "A", 2, 1], [1, "A", 1, 0], [2, "B", 0, 2], [3, "A", 3, 1]]);     // Netherlands v Japan
+    seedPreds("m49", [[0, "A", 1, 0], [1, "draw", 1, 1], [2, "A", 2, 0]]);                  // France v Senegal
   }
 
   /* ----------------------------- API ----------------------------- */
@@ -219,6 +230,18 @@
       save();
       return { ok: true };
     },
+    // Group everyone's picks for one fixture into supporter lists per side (A / draw / B).
+    fixturePredictors(fixtureId) {
+      const s = get(); const preds = s.predictions[fixtureId] || {};
+      const g = { A: [], draw: [], B: [] };
+      Object.keys(preds).forEach(id => {
+        const p = preds[id], usr = s.users[id];
+        const who = { id, name: (usr && usr.name) || "Someone", photoURL: (usr && usr.photoURL) || null };
+        (g[p.winner === "A" ? "A" : p.winner === "B" ? "B" : "draw"]).push(who);
+      });
+      return g;
+    },
+    loadFixturePredictors(fixtureId) { return Promise.resolve(this.fixturePredictors(fixtureId)); },
     // ADMIN: enter a result and award points to everyone who predicted it.
     scoreFixture(fixtureId, scoreA, scoreB) {
       const s = get();

@@ -14,30 +14,30 @@
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <link rel="manifest" href="manifest.json">
   <!-- Bump ?v= whenever you change CSS/JS so phones fetch the new version (no stale cache). -->
-  <link rel="stylesheet" href="css/styles.css?v=18">
+  <link rel="stylesheet" href="css/styles.css?v=19">
 </head>
 <body>
   <div id="app"><div style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#6B7280;font-family:-apple-system,BlinkMacSystemFont,sans-serif">Loading…</div></div>
 
   <!-- Data + logo (plain scripts so it runs even when opened directly) -->
-  <script src="js/firebase-config.js?v=18"></script>
-  <script src="js/logo.js?v=18"></script>
-  <script src="data/teams.js?v=18"></script>
-  <script src="data/fixtures.js?v=18"></script>
+  <script src="js/firebase-config.js?v=19"></script>
+  <script src="js/logo.js?v=19"></script>
+  <script src="data/teams.js?v=19"></script>
+  <script src="data/fixtures.js?v=19"></script>
 
   <!-- Storage layer: Firebase (live, once keys are pasted) or the local demo store -->
   <script>
     (function () {
       var FB = "https://www.gstatic.com/firebasejs/10.12.2/";
       var tags = window.ZB_LIVE
-        ? [FB + "firebase-app-compat.js", FB + "firebase-auth-compat.js", FB + "firebase-firestore-compat.js", "js/store-firebase.js?v=18"]
-        : ["js/store.js?v=18"];
+        ? [FB + "firebase-app-compat.js", FB + "firebase-auth-compat.js", FB + "firebase-firestore-compat.js", "js/store-firebase.js?v=19"]
+        : ["js/store.js?v=19"];
       tags.forEach(function (src) { document.write('<script src="' + src + '"><\/script>'); });
     })();
   </script>
 
   <!-- App -->
-  <script src="js/app.js?v=18"></script>
+  <script src="js/app.js?v=19"></script>
   <script>
     (function () {
       function boot() { window.ZB_BOOT && window.ZB_BOOT(); }

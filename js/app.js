@@ -99,6 +99,48 @@
     return `<span class="crown" title="Times colleagues have guessed your fun facts">${I.crown}</span><span style="color:var(--gold);font-weight:700;font-size:13px;margin-left:1px">${n}</span>`;
   }
 
+  /* ---- match supporters ("who predicted each team to win") ---- */
+  // One cluster: overlapping avatars + count for a side, tappable for the full list.
+  function supGroup(f, side, list, title) {
+    const n = list.length;
+    const label = side === "draw" ? "Draw" : esc((side === "A" ? f.teamA : f.teamB).name);
+    const faces = n
+      ? `<span class="sup-faces">${goalPreview(list)}</span><span class="sup-count">${n}</span>`
+      : `<span class="sup-none muted">—</span>`;
+    const el = h(`<button class="sup-col" data-side="${side}" type="button">
+        <span class="sup-label muted">${label}</span>
+        <span class="sup-faces-row">${faces}</span>
+      </button>`);
+    if (n) el.onclick = () => showPeopleList(title + ` (${n})`, list);
+    else el.disabled = true;
+    return el;
+  }
+  // Fill a card's supporters wrapper. autoOpen=true loads immediately (live games);
+  // otherwise show a one-tap reveal button (keeps reads low on the free Firebase plan).
+  function setupSupporters(wrap, f, autoOpen) {
+    const paint = () => {
+      const g = S.fixturePredictors(f.id);
+      if (!g) { wrap.innerHTML = `<div class="sup-loading muted">Loading picks…</div>`; return; }
+      const total = g.A.length + g.draw.length + g.B.length;
+      if (!total) { wrap.innerHTML = `<div class="sup-empty muted">No predictions yet — be the first!</div>`; return; }
+      wrap.innerHTML = `<div class="sup-title muted">Who's backing who</div><div class="supporters"></div>`;
+      const row = wrap.querySelector(".supporters");
+      row.appendChild(supGroup(f, "A", g.A, "Backing " + f.teamA.name));
+      row.appendChild(supGroup(f, "draw", g.draw, "Predicting a draw"));
+      row.appendChild(supGroup(f, "B", g.B, "Backing " + f.teamB.name));
+    };
+    const open = () => {
+      if (S.fixturePredictors(f.id)) { paint(); return; }
+      wrap.innerHTML = `<div class="sup-loading muted">Loading picks…</div>`;
+      S.loadFixturePredictors(f.id).then(() => paint());
+    };
+    if (autoOpen || S.fixturePredictors(f.id)) { open(); }
+    else {
+      wrap.innerHTML = `<button class="btn ghost sm sup-reveal" type="button" style="width:100%">👥 See who's backing each team</button>`;
+      wrap.querySelector(".sup-reveal").onclick = open;
+    }
+  }
+
   /* ---------------- icons ---------------- */
   const I = {
     ball: '<svg viewBox="0 0 243.596 243.596" width="1em" height="1em" fill="currentColor" style="vertical-align:-0.15em"><path d="M129,7.2A121.8,121.8,0,1,0,250.8,129,121.69,121.69,0,0,0,129,7.2Zm8.7,42.629,26.97-18.777a103.707,103.707,0,0,1,48.864,36.9l-8.337,29-11.817,4.06-55.679-39Zm43.644,64.017L161.55,172.5H96.3L76.654,113.846,129,77.161ZM93.329,31.052,120.3,49.829v12.18l-55.534,39-11.817-4.2L44.609,67.954A103.674,103.674,0,0,1,93.329,31.052ZM73.319,190.767l-26.462,2.247a103.171,103.171,0,0,1-22.112-63.147l22.62-16.53,12.035,4.2L80.134,178.95Zm82.286,39.149A103.764,103.764,0,0,1,129,233.4a110.554,110.554,0,0,1-26.607-3.48l-14.137-30.3,5.582-9.57H164.16l5.582,9.57Zm55.534-36.684-26.462-2.32-6.96-11.817,20.88-61.552,12.035-4.2,22.62,16.53A104.283,104.283,0,0,1,211.139,193.232Z" transform="translate(-7.2 -7.2)"/></svg>',
@@ -522,34 +564,47 @@
   function viewMatches() {
     const all = S.fixtures();
     const now = Date.now();
+    const isLive = f => !f.teamA.tbd && !f.teamB.tbd && f.status !== "finished" && new Date(f.kickoff).getTime() <= now;
+    const liveGames = all.filter(isLive);
     const soon = all.filter(f => !f.teamA.tbd && !f.teamB.tbd && f.status !== "finished"
       && new Date(f.kickoff).getTime() > now && new Date(f.kickoff).getTime() - now < 36 * 3600 * 1000
       && !S.myPrediction(f.id)).length;
     const wrap = h(`<div class="screen"><h2>Matches</h2><p class="sub">Predict the winner (5 pts) and the exact score (5 pts).</p></div>`);
     wrap.appendChild(countdownCard());
+
+    // live-now nudge (tap jumps to the Live filter)
+    if (liveGames.length && matchFilter !== "live") {
+      const lb = h(`<div class="banner live-banner"><span class="live-dot solid"></span>${liveGames.length} match${liveGames.length > 1 ? "es" : ""} live now — tap to see who's backing who</div>`);
+      lb.onclick = () => { matchFilter = "live"; viewMatches(); };
+      wrap.appendChild(lb);
+    }
     if (soon > 0) wrap.appendChild(h(`<div class="banner">${I.ball} ${soon} game${soon > 1 ? "s" : ""} to predict in the next day or two.</div>`));
 
     const myCode = (S.currentUser().country || {}).code;
-    const filters = myCode ? ["upcoming", "finished", "all", "myteam"] : ["upcoming", "finished", "all"];
+    let filters = myCode ? ["upcoming", "finished", "all", "myteam"] : ["upcoming", "finished", "all"];
+    if (liveGames.length) filters = ["live"].concat(filters);
     const labelFor = k => k === "myteam" ? "My team" : k;
     if (!filters.includes(matchFilter)) matchFilter = "upcoming";
     const chips = h(`<div class="row" style="gap:8px;margin-bottom:14px;flex-wrap:wrap">
-      ${filters.map(k => `<button class="chip ${matchFilter === k ? "" : "grey"}" data-k="${k}" style="cursor:pointer;text-transform:capitalize">${labelFor(k)}</button>`).join("")}</div>`);
+      ${filters.map(k => k === "live"
+        ? `<button class="chip live-chip ${matchFilter === "live" ? "on" : ""}" data-k="live" type="button"><span class="live-dot"></span>Live</button>`
+        : `<button class="chip ${matchFilter === k ? "" : "grey"}" data-k="${k}" style="cursor:pointer;text-transform:capitalize">${labelFor(k)}</button>`).join("")}</div>`);
     chips.querySelectorAll("[data-k]").forEach(b => b.onclick = () => { matchFilter = b.dataset.k; viewMatches(); });
     wrap.appendChild(chips);
 
     // always list chronologically by kickoff so each date shows all its games together
     let list = all.slice().sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
-    if (matchFilter === "upcoming") list = list.filter(f => f.status !== "finished");
+    if (matchFilter === "live") list = list.filter(isLive);
+    else if (matchFilter === "upcoming") list = list.filter(f => f.status !== "finished");
     else if (matchFilter === "finished") list = list.filter(f => f.status === "finished");
     else if (matchFilter === "myteam") list = list.filter(f => myCode && (f.teamA.code === myCode || f.teamB.code === myCode));
 
-    if (!list.length) wrap.appendChild(h(`<div class="empty">${I.ball}<p>${matchFilter === "myteam" ? "Your team's fixtures will appear here." : "No matches here yet."}</p></div>`));
+    if (!list.length) wrap.appendChild(h(`<div class="empty">${I.ball}<p>${matchFilter === "myteam" ? "Your team's fixtures will appear here." : matchFilter === "live" ? "No matches are live right now." : "No matches here yet."}</p></div>`));
     let lastDate = "";
     list.forEach(f => {
       const d = new Date(f.kickoff).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
       if (d !== lastDate) { wrap.appendChild(h(`<div class="section-title">${d}</div>`)); lastDate = d; }
-      wrap.appendChild(matchCard(f));
+      wrap.appendChild(matchCard(f, null, { supporters: true }));
     });
     setView(wrap);
   }
@@ -561,7 +616,8 @@
     return `<div class="match-side">${badge}<span>${esc(team.name)}${isMine ? ` <span style="color:var(--zb-blue)" title="Your team">★</span>` : ""}</span></div>`;
   }
 
-  function matchCard(f, onSaved) {
+  function matchCard(f, onSaved, opts) {
+    opts = opts || {};
     const pred = S.myPrediction(f.id);
     const finished = f.status === "finished";
     const tbd = f.teamA.tbd || f.teamB.tbd;
@@ -586,6 +642,14 @@
       <div class="pred-area"></div>
     </div>`);
     const area = card.querySelector(".pred-area");
+
+    // Supporters: who predicted each team to win. Live games open automatically;
+    // upcoming games reveal on tap. Not shown on TBD or finished games.
+    if (opts.supporters && !tbd && !finished) {
+      const sup = h(`<div class="sup-wrap"></div>`);
+      card.querySelector(".match-teams").after(sup);
+      setupSupporters(sup, f, kicked); // kicked && !finished === live → auto-open
+    }
 
     if (tbd && !finished) {
       area.appendChild(h(`<div class="divider"></div><p class="muted center" style="font-size:13px;margin:0">Teams confirmed after the group stage.</p>`));

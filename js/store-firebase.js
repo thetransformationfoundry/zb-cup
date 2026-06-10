@@ -32,6 +32,7 @@
     users: {},                 // uid -> user doc (incl. facts array)
     fixturesMeta: {},          // fixtureId -> { status, result, teamA, teamB }
     predictionsMine: {},       // fixtureId -> prediction
+    predictorsByFixture: {},   // fixtureId -> { uid -> prediction }  (everyone's picks, loaded on demand)
     guessesMine: [],           // my guesses
     posts: [],                 // chat posts
     zbFacts: [],
@@ -292,8 +293,32 @@
       const docId = fixtureId + "_" + u.id;
       const p = { fixtureId, uid: u.id, winner, scoreA, scoreB, pointsAwarded: null, createdAt: now() };
       cache.predictionsMine[fixtureId] = p;                    // optimistic
+      delete cache.predictorsByFixture[fixtureId];             // invalidate the "who picked what" cache
       db.collection("predictions").doc(docId).set(p);
       refresh(); return { ok: true };
+    },
+    // Group everyone's picks for one fixture into supporter lists per side.
+    // Returns null if not loaded yet (call loadFixturePredictors first).
+    fixturePredictors(fixtureId) {
+      const m = cache.predictorsByFixture[fixtureId];
+      if (!m) return null;
+      const g = { A: [], draw: [], B: [] };
+      Object.keys(m).forEach(id => {
+        const p = m[id], usr = cache.users[id];
+        const who = { id, name: (usr && usr.name) || "Someone", photoURL: (usr && usr.photoURL) || null };
+        (g[p.winner === "A" ? "A" : p.winner === "B" ? "B" : "draw"]).push(who);
+      });
+      return g;
+    },
+    // Fetch every prediction for one fixture (cheap, on-demand) and cache it.
+    loadFixturePredictors(fixtureId) {
+      return db.collection("predictions").where("fixtureId", "==", fixtureId).get()
+        .then(s => {
+          const m = {}; s.forEach(d => { const v = d.data(); if (v && v.uid) m[v.uid] = v; });
+          cache.predictorsByFixture[fixtureId] = m;
+          return this.fixturePredictors(fixtureId);
+        })
+        .catch(() => null);
     },
     // ADMIN: enter a result and award points to all correct predictors
     scoreFixture(fixtureId, scoreA, scoreB) {
