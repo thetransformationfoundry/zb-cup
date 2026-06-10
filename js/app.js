@@ -1497,18 +1497,6 @@
     };
     wrap.appendChild(secE);
 
-    // Maintenance: reset crowns (clean start after the crown meaning changed)
-    const secF = h(`<div class="card"><div class="section-title" style="margin-top:0">Maintenance</div>
-      <p class="muted" style="font-size:13px;margin:0 0 8px">Reset everyone's 👑 to zero — useful for a clean start after rule changes. Points are not affected.</p>
-      <button class="btn ghost danger" id="reset-crowns">Reset all crowns to 0</button></div>`);
-    secF.querySelector("#reset-crowns").onclick = () => {
-      const bg = modal(`<h3>Reset all crowns?</h3><p>This sets every player's 👑 count to 0. Points are unchanged. Continue?</p>
-        <div class="actions"><button class="btn secondary" id="x">Cancel</button><button class="btn" id="ok">Reset</button></div>`);
-      bg.querySelector("#x").onclick = () => bg.remove();
-      bg.querySelector("#ok").onclick = () => { if (S.resetCrowns) S.resetCrowns(); bg.remove(); toast("Crowns reset ✓"); renderApp(); };
-    };
-    wrap.appendChild(secF);
-
     setView(wrap);
   }
 
