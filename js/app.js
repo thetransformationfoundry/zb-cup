@@ -115,12 +115,17 @@
     else el.disabled = true;
     return el;
   }
-  // Fill a card's supporters wrapper. autoOpen=true loads immediately (live games);
-  // otherwise show a one-tap reveal button (keeps reads low on the free Firebase plan).
-  function setupSupporters(wrap, f, autoOpen) {
+  // grey placeholder circles, so the layout doesn't jump while a fixture's picks load
+  function supSkeleton(f) {
+    const col = (label) => `<div class="sup-col" style="cursor:default"><span class="sup-label muted">${label}</span><span class="sup-faces-row"><span class="sup-skel"></span><span class="sup-skel"></span></span></div>`;
+    return `<div class="sup-title muted">Who's backing who</div><div class="supporters">${col(esc(f.teamA.name))}${col("Draw")}${col(esc(f.teamB.name))}</div>`;
+  }
+  // Fill a card's supporters wrapper with real avatars. Loads each fixture's picks
+  // only when the card scrolls into view (keeps Firestore reads low on the free plan).
+  function setupSupporters(wrap, f) {
     const paint = () => {
       const g = S.fixturePredictors(f.id);
-      if (!g) { wrap.innerHTML = `<div class="sup-loading muted">Loading picks…</div>`; return; }
+      if (!g) { wrap.innerHTML = supSkeleton(f); return; }
       const total = g.A.length + g.draw.length + g.B.length;
       if (!total) { wrap.innerHTML = `<div class="sup-empty muted">No predictions yet — be the first!</div>`; return; }
       wrap.innerHTML = `<div class="sup-title muted">Who's backing who</div><div class="supporters"></div>`;
@@ -129,16 +134,19 @@
       row.appendChild(supGroup(f, "draw", g.draw, "Predicting a draw"));
       row.appendChild(supGroup(f, "B", g.B, "Backing " + f.teamB.name));
     };
-    const open = () => {
+    const load = () => {
       if (S.fixturePredictors(f.id)) { paint(); return; }
-      wrap.innerHTML = `<div class="sup-loading muted">Loading picks…</div>`;
-      S.loadFixturePredictors(f.id).then(() => paint());
+      wrap.innerHTML = supSkeleton(f);
+      S.loadFixturePredictors(f.id).then(paint);
     };
-    if (autoOpen || S.fixturePredictors(f.id)) { open(); }
-    else {
-      wrap.innerHTML = `<button class="btn ghost sm sup-reveal" type="button" style="width:100%">👥 See who's backing each team</button>`;
-      wrap.querySelector(".sup-reveal").onclick = open;
-    }
+    if (S.fixturePredictors(f.id)) { paint(); return; }   // cached already
+    wrap.innerHTML = supSkeleton(f);
+    if (typeof IntersectionObserver === "function") {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) { io.disconnect(); load(); } });
+      }, { rootMargin: "150px" });
+      io.observe(wrap);
+    } else { load(); }
   }
 
   /* ---------------- icons ---------------- */
@@ -560,6 +568,40 @@
     return card;
   }
 
+  // Tapping the Live chip when nothing is in play → a fun "come back at kickoff" countdown.
+  function liveCountdownModal() {
+    const t = Date.now();
+    const upcoming = S.fixtures()
+      .filter(f => !f.teamA.tbd && !f.teamB.tbd && new Date(f.kickoff).getTime() > t)
+      .sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
+    const next = upcoming[0];
+    if (!next) return toast("No upcoming matches scheduled yet.");
+    const nextMs = new Date(next.kickoff).getTime();
+    const nextDay = new Date(next.kickoff).toDateString();
+    const sameDay = upcoming.filter(f => new Date(f.kickoff).toDateString() === nextDay);
+    const dayStr = new Date(next.kickoff).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+    const localTime = new Date(next.kickoff).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+    const bg = modal(`
+      <div class="center">
+        <div style="font-size:42px;line-height:1;margin-bottom:8px">⏰</div>
+        <h3 style="margin-bottom:6px">No matches live right now</h3>
+        <p style="margin:0 0 16px">Come back when the whistle blows! Next kick-off in…</p>
+        <div id="live-cd" style="font-size:40px;font-weight:800;color:var(--zb-blue);letter-spacing:-.02em;line-height:1">—</div>
+        <div class="row" style="justify-content:center;gap:8px;margin:14px 0 4px;font-weight:700;flex-wrap:wrap">${flag(next.teamA)} ${esc(next.teamA.name)} <span class="muted">v</span> ${esc(next.teamB.name)} ${flag(next.teamB)}</div>
+        <div class="muted" style="font-size:13px">${esc(localTime)} · your local time</div>
+        <div class="chip" style="margin-top:14px">${sameDay.length} match${sameDay.length > 1 ? "es" : ""} on ${esc(dayStr)}</div>
+      </div>
+      <button class="btn" id="x" style="margin-top:18px">Got it</button>`);
+    bg.querySelector("#x").onclick = () => bg.remove();
+    const cdEl = bg.querySelector("#live-cd");
+    const tick = () => {
+      if (!document.body.contains(cdEl)) { clearInterval(iv); return; } // stop when modal closes
+      cdEl.textContent = fmtCountdown(nextMs - Date.now());
+    };
+    tick();
+    const iv = setInterval(tick, 1000);
+  }
+
   /* ---------------- MATCHES ---------------- */
   function viewMatches() {
     const all = S.fixtures();
@@ -581,15 +623,21 @@
     if (soon > 0) wrap.appendChild(h(`<div class="banner">${I.ball} ${soon} game${soon > 1 ? "s" : ""} to predict in the next day or two.</div>`));
 
     const myCode = (S.currentUser().country || {}).code;
-    let filters = myCode ? ["upcoming", "finished", "all", "myteam"] : ["upcoming", "finished", "all"];
-    if (liveGames.length) filters = ["live"].concat(filters);
+    const baseFilters = myCode ? ["upcoming", "finished", "all", "myteam"] : ["upcoming", "finished", "all"];
     const labelFor = k => k === "myteam" ? "My team" : k;
-    if (!filters.includes(matchFilter)) matchFilter = "upcoming";
-    const chips = h(`<div class="row" style="gap:8px;margin-bottom:14px;flex-wrap:wrap">
-      ${filters.map(k => k === "live"
-        ? `<button class="chip live-chip ${matchFilter === "live" ? "on" : ""}" data-k="live" type="button"><span class="live-dot"></span>Live</button>`
-        : `<button class="chip ${matchFilter === k ? "" : "grey"}" data-k="${k}" style="cursor:pointer;text-transform:capitalize">${labelFor(k)}</button>`).join("")}</div>`);
-    chips.querySelectorAll("[data-k]").forEach(b => b.onclick = () => { matchFilter = b.dataset.k; viewMatches(); });
+    const hasLive = liveGames.length > 0;
+    if (matchFilter === "live" && !hasLive) matchFilter = "upcoming";        // don't get stuck on an empty Live view
+    if (matchFilter !== "live" && !baseFilters.includes(matchFilter)) matchFilter = "upcoming";
+    const chips = h(`<div class="row" style="gap:8px;margin-bottom:14px;flex-wrap:wrap"></div>`);
+    // Live chip is ALWAYS shown. Live games → filter to them; otherwise → countdown modal.
+    const liveChip = h(`<button class="chip live-chip ${hasLive ? "" : "idle"} ${matchFilter === "live" ? "on" : ""}" type="button"><span class="live-dot"></span>Live</button>`);
+    liveChip.onclick = () => { if (hasLive) { matchFilter = "live"; viewMatches(); } else liveCountdownModal(); };
+    chips.appendChild(liveChip);
+    baseFilters.forEach(k => {
+      const b = h(`<button class="chip ${matchFilter === k ? "" : "grey"}" type="button" style="cursor:pointer;text-transform:capitalize">${labelFor(k)}</button>`);
+      b.onclick = () => { matchFilter = k; viewMatches(); };
+      chips.appendChild(b);
+    });
     wrap.appendChild(chips);
 
     // always list chronologically by kickoff so each date shows all its games together
@@ -648,7 +696,7 @@
     if (opts.supporters && !tbd && !finished) {
       const sup = h(`<div class="sup-wrap"></div>`);
       card.querySelector(".match-teams").after(sup);
-      setupSupporters(sup, f, kicked); // kicked && !finished === live → auto-open
+      setupSupporters(sup, f);
     }
 
     if (tbd && !finished) {

@@ -271,13 +271,18 @@ textarea.input { resize: vertical; min-height: 80px; }
 .sup-col:not(:disabled):hover { background: var(--bg); }
 .sup-col:disabled { cursor: default; }
 .sup-label { font-size: 11px; font-weight: 600; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sup-faces-row { display: flex; align-items: center; gap: 6px; min-height: 26px; }
+.sup-faces-row { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 26px; }
+.sup-faces { display: inline-flex; align-items: center; }   /* keeps photo + initials avatars on one line */
+.sup-faces img, .sup-faces span { vertical-align: middle; }
 .sup-count { font-weight: 700; font-size: 13px; color: var(--ink); }
 .sup-none { font-size: 14px; }
+.sup-skel { width: 26px; height: 26px; border-radius: 50%; background: var(--line); display: inline-block; flex: 0 0 auto; }
 
 /* ---------- live now ---------- */
 .live-chip { background: var(--bad); color: #fff; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
 .live-chip.on { box-shadow: 0 0 0 2px rgba(214,69,69,.35); }
+.live-chip.idle { background: #F1F3F6; color: var(--muted); }
+.live-chip.idle .live-dot { background: var(--muted); animation: none; }
 .live-banner { background: #FBE9E9; color: var(--bad); cursor: pointer; }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; flex: 0 0 auto; animation: livepulse 1.4s infinite; }
 .live-dot.solid { background: var(--bad); }
