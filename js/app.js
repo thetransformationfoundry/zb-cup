@@ -121,6 +121,7 @@
   let expandedReplies = new Set(); // chat posts whose replies are expanded
   let pendingChatPhoto = null;     // photo attached to the chat composer, before posting
   let subScreen = null;            // active "More" sub-screen (so live refreshes don't bounce us back)
+  let annExpanded = false;         // is the pinned announcement expanded?
   let onb = null; // onboarding working state
 
   /* =====================================================
@@ -686,6 +687,30 @@
       </div>`));
     }
 
+    // 🌟 Colleague Highlight of the Day
+    const cotd = S.colleagueOfTheDay ? S.colleagueOfTheDay() : null;
+    if (cotd) {
+      if (cotd.id === me.id) {
+        wrap.appendChild(h(`<div class="card" style="background:linear-gradient(135deg,#fff,#FBF3D7)">
+          <span class="chip gold" style="margin-bottom:8px">🌟 Colleague of the Day</span>
+          <div style="font-weight:700;font-size:16px;margin:6px 0 4px">It's you today! 🎉</div>
+          <div class="muted" style="color:var(--ink);font-size:14px">You're in the spotlight — colleagues are getting to know you. Sit back and watch the guesses roll in!</div>
+        </div>`));
+      } else {
+        const done = S.factsFor(cotd.id).every(f => S.alreadyCorrect(cotd.id, f.id)) && S.factsFor(cotd.id).length > 0;
+        const card = h(`<div class="card" style="background:linear-gradient(135deg,#fff,#FBF3D7)">
+          <span class="chip gold" style="margin-bottom:8px">🌟 Colleague of the Day</span>
+          <div class="row" style="gap:12px;margin:8px 0">${avatar(cotd, "lg")}
+            <div><div style="font-weight:700;font-size:17px">${esc(cotd.name)}</div>
+            <div class="muted" style="font-size:13px">${done ? "You've guessed all their facts ✅" : "3 fun facts to guess"}</div></div></div>
+          <div class="muted" style="color:var(--ink);font-size:14px;margin-bottom:10px">Get to know <b>${esc(cotd.name)}</b>, beyond their awesomeness we already know! Give their fun facts a go 👇</div>
+          <button class="btn" id="cotd-go">${done ? "See their facts" : "Guess " + esc(cotd.name.split(" ")[0]) + "'s facts"}</button>
+        </div>`);
+        card.querySelector("#cotd-go").onclick = () => guessPerson(cotd);
+        wrap.appendChild(card);
+      }
+    }
+
     if (myFacts.length < 3) {
       wrap.appendChild(h(`<div class="banner">${I.star} Set up your 3 fun facts so others can guess them.</div>`));
     }
@@ -847,14 +872,19 @@
     // pinned admin announcement
     const ann = S.announcement ? S.announcement() : null;
     if (ann) {
+      const full = ann.text || "";
+      const long = full.length > 160 || (full.match(/\n/g) || []).length > 2;
+      const shown = annExpanded || !long;
+      const body = shown ? full : full.slice(0, 150).replace(/\s+\S*$/, "") + "…";
       const card = h(`<div class="card" style="background:linear-gradient(135deg,#ffffff,var(--zb-blue-soft));border-color:var(--zb-blue)">
         <div class="row between" style="margin-bottom:6px"><span class="chip">📢 Announcement</span>
           ${S.isAdmin() ? `<button class="ann-clear btn ghost" style="width:auto;padding:0;font-size:12px">Remove</button>` : ""}</div>
-        <div style="white-space:pre-wrap">${esc(ann.text)}</div>
-        <div class="muted" style="font-size:12px;margin-top:8px">${esc(ann.byName || "Admin")} · ${timeAgo(ann.createdAt)} ago</div>
+        <div style="white-space:pre-wrap">${esc(body)}</div>
+        ${long ? `<button class="ann-toggle btn ghost" style="width:auto;padding:6px 0;font-size:13px">${shown ? "Show less" : "Expand"}</button>` : ""}
+        <div class="muted" style="font-size:12px;margin-top:4px">${esc(ann.byName || "Admin")} · ${timeAgo(ann.createdAt)} ago</div>
       </div>`);
-      const clr = card.querySelector(".ann-clear");
-      if (clr) clr.onclick = () => { S.clearAnnouncement(); viewChat(); };
+      const tg = card.querySelector(".ann-toggle"); if (tg) tg.onclick = () => { annExpanded = !annExpanded; viewChat(); };
+      const clr = card.querySelector(".ann-clear"); if (clr) clr.onclick = () => { S.clearAnnouncement(); viewChat(); };
       feed.appendChild(card);
     }
     const blockedIds = new Set(S.allUsers().filter(u => u.blocked).map(u => u.id));
@@ -873,11 +903,11 @@
           ${p.imageURL ? `<img src="${esc(p.imageURL)}" alt="photo" style="width:100%;border-radius:12px;margin-top:8px">` : ""}
           <div class="row" style="gap:16px;margin-top:8px;flex-wrap:wrap">
             <button class="goal-btn ${on ? "on" : ""}">${I.ball}<span>${on ? "Goaled" : "Goal"}</span></button>
-            <button class="reply-btn goal-btn">💬 <span>Reply</span></button>
             ${replies.length ? `<button class="toggle-btn goal-btn"><span>${expandedReplies.has(p.id) ? "Hide replies" : "View " + replies.length + " repl" + (replies.length === 1 ? "y" : "ies")}</span></button>` : ""}
           </div>
           ${goals > 0 ? `<button class="goalers-btn" style="display:flex;align-items:center;gap:8px;background:none;border:none;cursor:pointer;padding:8px 0 0;margin:0;width:auto"><span style="display:inline-flex" class="gp"></span><span class="muted" style="font-size:13px;font-weight:600">${goals} Goal${goals === 1 ? "" : "s"} given</span></button>` : ""}
           <div class="replies"></div>
+          <div class="reply-row" style="display:flex;justify-content:flex-end;margin-top:8px"><button class="reply-btn goal-btn">💬 <span>Reply</span></button></div>
           <div class="reply-box" style="display:none"></div>
         </div></div>`);
       post.querySelector(".goal-btn").onclick = () => { S.toggleGoal(p.id); viewChat(); };

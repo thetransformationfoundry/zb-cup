@@ -68,7 +68,8 @@
       ensureAdmin();
       refresh();
     });
-    db.collection("posts").orderBy("createdAt").onSnapshot(s => {
+    // only the most recent 60 posts — keeps bandwidth (egress) low as the feed grows
+    db.collection("posts").orderBy("createdAt", "desc").limit(60).onSnapshot(s => {
       cache.posts = s.docs.map(d => Object.assign({ id: d.id }, d.data()));
       refresh();
     });
@@ -400,6 +401,14 @@
       if (!facts.length) return null;
       const dayIndex = Math.floor(new Date(todayKey()).getTime() / 86400000);
       return facts[dayIndex % facts.length];
+    },
+    // one featured colleague per day (same for everyone), among users who've set facts
+    colleagueOfTheDay() {
+      const list = Object.values(cache.users).filter(u => (u.facts || []).length >= 1)
+        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      if (!list.length) return null;
+      const dayIndex = Math.floor(new Date(todayKey()).getTime() / 86400000);
+      return list[dayIndex % list.length];
     },
     addZbFact({ title, body, imageURL, linkURL }) {
       db.collection("zbFacts").add({ title, body, imageURL: imageURL || null, linkURL: linkURL || null, createdAt: now(), createdBy: cache.uid });

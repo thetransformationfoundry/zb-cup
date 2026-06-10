@@ -343,6 +343,14 @@
       const dayIndex = Math.floor(new Date(todayKey()).getTime() / 86400000);
       return facts[dayIndex % facts.length];
     },
+    colleagueOfTheDay() {
+      const s = get();
+      const list = Object.values(s.users).filter(u => (s.facts[u.id] || []).length >= 1)
+        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      if (!list.length) return null;
+      const dayIndex = Math.floor(new Date(todayKey()).getTime() / 86400000);
+      return list[dayIndex % list.length];
+    },
     addZbFact({ title, body, imageURL, linkURL }) {
       const s = get();
       s.zbFacts.push({ id: uid(), title, body, imageURL: imageURL || null, linkURL: linkURL || null, createdAt: now() });
