@@ -178,12 +178,26 @@
   /* =====================================================
      ENTRY
   ===================================================== */
+  function renderLoading() {
+    root.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:var(--muted);font-family:var(--font)">Loading…</div>`;
+  }
+
   function render() {
     const u = S.currentUser();
     // 1) Live email mode, not signed in yet → email login (or forgot-password) step
     if (S.emailLogin && !S.authed()) {
       if (!onb || !["email", "forgot"].includes(onb.step)) onb = { step: "email" };
       return renderOnboarding();
+    }
+    // 1b) Signed in but profile not confirmed loaded yet → WAIT on a loading screen.
+    // (A slow profile load must never be mistaken for a brand-new user, or onboarding
+    //  could overwrite an existing player's points/country.)
+    if (S.emailLogin && S.authed() && !u && S.profileKnown && !S.profileKnown()) {
+      if (S.reloadMe && !window.__zbProfileReloading) {
+        window.__zbProfileReloading = true;
+        S.reloadMe().then(() => { window.__zbProfileReloading = false; render(); });
+      }
+      return renderLoading();
     }
     // 2) Signed in (or demo) but no profile → name/identity → photo → facts → country
     if (!u) {
@@ -1458,9 +1472,11 @@
     const pl = secD.querySelector("#pl");
     S.allUsers().forEach(u => {
       const row = h(`<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">${avatar(u, "sm")}
-        <span style="flex:1;font-weight:600;font-size:14px">${esc(u.name)} ${u.blocked ? `<span class="chip" style="background:#FBEBEB;color:var(--bad)">blocked</span>` : ""}</span>
-        <button class="btn ${u.blocked ? "secondary" : "danger"} sm" style="width:auto">${u.blocked ? "Unblock" : "Block"}</button></div>`);
-      row.querySelector("button").onclick = () => { S.toggleBlock(u.id); subAdmin(); };
+        <span style="flex:1;font-weight:600;font-size:14px">${esc(u.name)} <span class="muted" style="font-weight:600">· ${u.points || 0} pts</span> ${u.blocked ? `<span class="chip" style="background:#FBEBEB;color:var(--bad)">blocked</span>` : ""}</span>
+        <button class="btn ghost sm edit-p" style="width:auto;padding:4px 8px">Edit</button>
+        <button class="btn ${u.blocked ? "secondary" : "danger"} sm block-p" style="width:auto">${u.blocked ? "Unblock" : "Block"}</button></div>`);
+      row.querySelector(".block-p").onclick = () => { S.toggleBlock(u.id); subAdmin(); };
+      row.querySelector(".edit-p").onclick = () => promptEditPlayer(u);
       pl.appendChild(row);
     });
     wrap.appendChild(secD);
@@ -1494,6 +1510,27 @@
     wrap.appendChild(secF);
 
     setView(wrap);
+  }
+
+  function promptEditPlayer(u) {
+    const opts = window.ZB_TEAMS.map(t => `<option value="${t.code}" ${u.country && u.country.code === t.code ? "selected" : ""}>${esc(t.name)}</option>`).join("");
+    const bg = modal(`<h3>Edit ${esc(u.name)}</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">Correct a player's points or country — e.g. to restore data after an issue. Use with care.</p>
+      <label class="fld">Points</label>
+      <input class="input" id="ep" type="number" inputmode="numeric" value="${u.points || 0}">
+      <label class="fld">Country</label>
+      <select class="input" id="ec"><option value="">— none —</option>${opts}</select>
+      <div class="actions" style="margin-top:16px"><button class="btn secondary" id="x">Cancel</button><button class="btn" id="ok">Save</button></div>`);
+    bg.querySelector("#x").onclick = () => bg.remove();
+    bg.querySelector("#ok").onclick = () => {
+      const pts = parseInt(bg.querySelector("#ep").value, 10);
+      const code = bg.querySelector("#ec").value;
+      const patch = { points: isNaN(pts) ? 0 : pts };
+      patch.country = code ? { code, name: (window.ZB_TEAM_BY_CODE[code] || {}).name || code } : null;
+      const r = S.adminUpdateUser(u.id, patch);
+      if (r && r.error) return toast(r.error);
+      bg.remove(); toast("Player updated ✓"); subAdmin();
+    };
   }
 
   function promptSetTeams(f) {

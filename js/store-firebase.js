@@ -28,6 +28,7 @@
   const cache = {
     uid: null,
     authed: false,             // is there a signed-in (email-link) user?
+    profileLoaded: false,      // have we actually confirmed whether this user has a profile doc?
     authEmail: null,           // that user's email
     users: {},                 // uid -> user doc (incl. facts array)
     fixturesMeta: {},          // fixtureId -> { status, result, teamA, teamB }
@@ -93,6 +94,7 @@
       const u = {};
       s.forEach(d => { u[d.id] = Object.assign({ id: d.id }, d.data()); });
       cache.users = u;
+      if (cache.uid && u[cache.uid]) cache.profileLoaded = true; // our profile is now known
       ensureAdmin();
       maybeClaimCotd();
       refresh();
@@ -164,11 +166,11 @@
         attachListeners();
         // load the profile BEFORE rendering, so returning users don't flash the name screen
         db.collection("users").doc(user.uid).get()
-          .then(d => { if (d && d.exists) cache.users[user.uid] = Object.assign({ id: d.id }, d.data()); })
+          .then(d => { if (d && d.exists) cache.users[user.uid] = Object.assign({ id: d.id }, d.data()); cache.profileLoaded = true; })
           .catch(() => {})
           .then(() => { ensureAdmin(); resolve(); refresh(); });
       } else {
-        cache.uid = null; cache.authEmail = null; cache.authed = false;
+        cache.uid = null; cache.authEmail = null; cache.authed = false; cache.profileLoaded = true;
         resolve(); refresh();
       }
     });
@@ -196,21 +198,51 @@
     reloadMe() {
       if (!cache.uid) return Promise.resolve();
       return db.collection("users").doc(cache.uid).get()
-        .then(d => { if (d && d.exists) cache.users[cache.uid] = Object.assign({ id: d.id }, d.data()); })
+        .then(d => { if (d && d.exists) cache.users[cache.uid] = Object.assign({ id: d.id }, d.data()); cache.profileLoaded = true; })
         .catch(() => {});
     },
+    // True once we actually know whether this user has a profile (so a slow load isn't
+    // mistaken for a brand-new user — which previously let onboarding wipe their data).
+    profileKnown() { return cache.profileLoaded; },
     signUp({ name }) {
       const id = cache.uid;
       const email = cache.authEmail || "";
-      const doc = {
+      const isAdminEmail = adminEmails.includes(email.toLowerCase());
+      const fresh = {
         name, email, photoURL: null, country: null,
-        isAdmin: adminEmails.includes(email.toLowerCase()),
-        blocked: false, points: 0, crowns: 0, facts: [], createdAt: now()
+        isAdmin: isAdminEmail, blocked: false, points: 0, crowns: 0, facts: [], createdAt: now()
       };
-      cache.users[id] = Object.assign({ id }, doc);           // optimistic
-      db.collection("users").doc(id).set(doc, { merge: true });
+      // SAFETY: if a profile already exists (returning user briefly seen as 'new'),
+      // never overwrite their points/country/facts — at most fill in a missing name.
+      const existing = cache.users[id];
+      if (existing && (existing.country || existing.points || (existing.facts && existing.facts.length) || existing.createdAt)) {
+        if (!existing.name && name) { existing.name = name; db.collection("users").doc(id).update({ name }); }
+        cache.profileLoaded = true; refresh();
+        return existing;
+      }
+      cache.users[id] = Object.assign({ id }, fresh);          // optimistic create
+      cache.profileLoaded = true;
+      // Double-check the server before writing, so we don't clobber an existing doc
+      // that simply hadn't loaded into the cache yet.
+      db.collection("users").doc(id).get().then(snap => {
+        if (snap.exists) {
+          const data = snap.data();
+          cache.users[id] = Object.assign({ id }, data);       // keep their real data
+          if (!data.name && name) db.collection("users").doc(id).update({ name });
+        } else {
+          db.collection("users").doc(id).set(fresh);
+        }
+        refresh();
+      }).catch(() => { db.collection("users").doc(id).set(fresh, { merge: true }); refresh(); });
       refresh();
       return cache.users[id];
+    },
+    // ADMIN: correct any player's fields (e.g. restore points/country after an issue).
+    adminUpdateUser(userId, patch) {
+      const u = cache.users[userId]; if (!u) return { error: "User not found" };
+      Object.assign(u, patch);                                 // optimistic
+      db.collection("users").doc(userId).update(patch);
+      refresh(); return { ok: true };
     },
     signOut() {
       cache.uid = null; cache.authed = false; cache.authEmail = null;

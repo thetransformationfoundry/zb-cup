@@ -148,6 +148,7 @@
       save();
       return s.users[id];
     },
+    profileKnown() { return true; }, // demo is synchronous; profile is always known
     signOut() { get().currentUserId = null; save(); },
     updateProfile(patch) {
       const u = this.currentUser(); if (!u) return;
@@ -343,6 +344,11 @@
     toggleBlock(userId) {
       const s = get(); const u = s.users[userId]; if (!u) return;
       u.blocked = !u.blocked; save(); return u.blocked;
+    },
+    // ADMIN: correct any player's fields (e.g. restore points/country after an issue).
+    adminUpdateUser(userId, patch) {
+      const s = get(); const u = s.users[userId]; if (!u) return { error: "User not found" };
+      Object.assign(u, patch); save(); return { ok: true };
     },
 
     /* --- admin: set teams on a fixture (for knockout slots once known) --- */
