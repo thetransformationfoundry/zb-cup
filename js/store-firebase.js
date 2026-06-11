@@ -86,6 +86,28 @@
     })).catch(() => { cotdClaimTried = null; });    // allow a retry on failure
   }
 
+  // ---- Colleague of the Day listener, bound to the CURRENT day ----
+  // Re-subscribes when the date rolls over (e.g. app left open / resumed next morning),
+  // so today's pick always gets watched and claimed instead of being stuck on yesterday.
+  let cotdDay = null, cotdUnsub = null;
+  function ensureCotdListener() {
+    const key = todayKey();
+    if (cotdDay === key) return;
+    if (cotdUnsub) { try { cotdUnsub(); } catch (e) {} }
+    cotdDay = key;
+    cotdUnsub = db.doc("cotd/" + key).onSnapshot(d => {
+      cache.cotd = d.exists ? d.data() : null;
+      if (!cache.cotd) maybeClaimCotd();
+      refresh();
+    });
+  }
+  // When the app is brought back to the foreground, re-check the day + today's pick.
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && cache.authed) { ensureCotdListener(); maybeClaimCotd(); }
+    });
+  }
+
   // ---- listeners (attached once, after auth) ----
   let listenersOn = false;
   function attachListeners() {
@@ -99,11 +121,7 @@
       maybeClaimCotd();
       refresh();
     });
-    db.doc("cotd/" + todayKey()).onSnapshot(d => {
-      cache.cotd = d.exists ? d.data() : null;
-      if (!cache.cotd) maybeClaimCotd();
-      refresh();
-    });
+    ensureCotdListener();
     // only the most recent 60 posts — keeps bandwidth (egress) low as the feed grows
     db.collection("posts").orderBy("createdAt", "desc").limit(60).onSnapshot(s => {
       cache.posts = s.docs.map(d => Object.assign({ id: d.id }, d.data()));
@@ -494,7 +512,9 @@
     },
     // today's featured colleague (persisted, random, no repeats until everyone's featured)
     colleagueOfTheDay() {
-      if (!cache.cotd) return null;
+      ensureCotdListener();                              // make sure we're watching today's slot
+      // Ignore a stale pick from a previous day and (re)claim today's if needed.
+      if (!cache.cotd || cache.cotd.dateKey !== todayKey()) { maybeClaimCotd(); return null; }
       const u = cache.users[cache.cotd.userId]; if (!u) return null;
       return Object.assign({}, u, { claps: cache.cotd.claps || 0, clappedBy: cache.cotd.clappedBy || [] });
     },
