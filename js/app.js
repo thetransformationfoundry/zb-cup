@@ -149,6 +149,53 @@
     } else { load(); }
   }
 
+  /* ---- finished-match winners (gold ring = right winner +5, 👑 = perfect score +10) ---- */
+  function winFace(u, perfect, i) {
+    const ml = i ? "margin-left:-8px;" : "";
+    const ring = "box-shadow:0 0 0 2px var(--gold);";
+    const inner = u.photoURL
+      ? `<img src="${esc(u.photoURL)}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:2px solid #fff;${ring}${ml}">`
+      : `<span style="width:30px;height:30px;border-radius:50%;background:var(--zb-blue-soft);color:var(--zb-blue);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid #fff;${ring}${ml}">${initials(u.name)}</span>`;
+    return `<span class="win-face">${inner}${perfect ? `<span class="win-crown">${I.crown}</span>` : ""}</span>`;
+  }
+  function winSkeleton() {
+    return `<div class="sup-title muted">Who called it 🏆</div><div class="sup-faces-row" style="justify-content:flex-start"><span class="sup-skel"></span><span class="sup-skel"></span><span class="sup-skel"></span></div>`;
+  }
+  function showWinnersList(f, winners, isPerfect) {
+    const rows = winners.map(u => `<div class="row" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
+      ${avatar(u, "sm")}<span style="font-weight:600;flex:1">${esc(u.name)}</span>
+      <span class="chip ${isPerfect(u) ? "gold" : "good"}">${isPerfect(u) ? "+10 " + I.crown : "+5"}</span></div>`).join("");
+    const bg = modal(`<h3>🏆 Who called it</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">${esc(f.teamA.name)} ${f.result.scoreA}–${f.result.scoreB} ${esc(f.teamB.name)} · gold ring = right winner (+5), 👑 = perfect score (+10)</p>
+      <div style="max-height:55vh;overflow-y:auto">${rows}</div>
+      <button class="btn" id="x" style="margin-top:14px">Close</button>`);
+    bg.querySelector("#x").onclick = () => bg.remove();
+  }
+  function setupFinishedWinners(wrap, f) {
+    const paint = () => {
+      const g = S.fixturePredictors(f.id);
+      if (!g || !f.result) { wrap.innerHTML = winSkeleton(); return; }
+      const r = f.result;
+      const realWinner = r.scoreA > r.scoreB ? "A" : r.scoreB > r.scoreA ? "B" : "draw";
+      const isPerfect = u => u.scoreA === r.scoreA && u.scoreB === r.scoreB;
+      const winners = (g[realWinner] || []).slice().sort((a, b) => (isPerfect(b) ? 1 : 0) - (isPerfect(a) ? 1 : 0));
+      if (!winners.length) { wrap.innerHTML = `<div class="sup-title muted">Who called it 🏆</div><div class="sup-empty muted">Nobody predicted this result.</div>`; return; }
+      const preview = winners.slice(0, 6).map((u, i) => winFace(u, isPerfect(u), i)).join("");
+      wrap.innerHTML = `<div class="sup-title muted">Who called it 🏆</div>
+        <button class="win-row" type="button"><span class="win-faces">${preview}</span><span class="sup-count">${winners.length} ${winners.length === 1 ? "got it" : "got it"}</span></button>`;
+      wrap.querySelector(".win-row").onclick = () => showWinnersList(f, winners, isPerfect);
+    };
+    const load = () => { if (S.fixturePredictors(f.id)) { paint(); return; } wrap.innerHTML = winSkeleton(); S.loadFixturePredictors(f.id).then(paint); };
+    if (S.fixturePredictors(f.id)) { paint(); return; }
+    wrap.innerHTML = winSkeleton();
+    if (typeof IntersectionObserver === "function") {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) { io.disconnect(); load(); } });
+      }, { rootMargin: "150px" });
+      io.observe(wrap);
+    } else { load(); }
+  }
+
   /* ---------------- icons ---------------- */
   const I = {
     ball: '<svg viewBox="0 0 243.596 243.596" width="1em" height="1em" fill="currentColor" style="vertical-align:-0.15em"><path d="M129,7.2A121.8,121.8,0,1,0,250.8,129,121.69,121.69,0,0,0,129,7.2Zm8.7,42.629,26.97-18.777a103.707,103.707,0,0,1,48.864,36.9l-8.337,29-11.817,4.06-55.679-39Zm43.644,64.017L161.55,172.5H96.3L76.654,113.846,129,77.161ZM93.329,31.052,120.3,49.829v12.18l-55.534,39-11.817-4.2L44.609,67.954A103.674,103.674,0,0,1,93.329,31.052ZM73.319,190.767l-26.462,2.247a103.171,103.171,0,0,1-22.112-63.147l22.62-16.53,12.035,4.2L80.134,178.95Zm82.286,39.149A103.764,103.764,0,0,1,129,233.4a110.554,110.554,0,0,1-26.607-3.48l-14.137-30.3,5.582-9.57H164.16l5.582,9.57Zm55.534-36.684-26.462-2.32-6.96-11.817,20.88-61.552,12.035-4.2,22.62,16.53A104.283,104.283,0,0,1,211.139,193.232Z" transform="translate(-7.2 -7.2)"/></svg>',
@@ -712,6 +759,12 @@
       card.querySelector(".match-teams").after(sup);
       setupSupporters(sup, f);
     }
+    // Finished games: show who called it (gold ring = right winner, 👑 = perfect score).
+    if (opts.supporters && !tbd && finished && f.result) {
+      const win = h(`<div class="sup-wrap"></div>`);
+      card.querySelector(".match-teams").after(win);
+      setupFinishedWinners(win, f);
+    }
 
     if (tbd && !finished) {
       area.appendChild(h(`<div class="divider"></div><p class="muted center" style="font-size:13px;margin:0">Teams confirmed after the group stage.</p>`));
@@ -978,17 +1031,21 @@
 
   function openNotifications() {
     const items = S.notifications ? S.notifications() : [];
-    const icon = t => t === "guess" ? "👑" : t === "reply" ? "💬" : t === "announcement" ? "📢" : t === "bug" ? "🐞" : t === "celebrate" ? "👏" : "⚽";
+    const icon = t => t === "guess" ? "👑" : t === "reply" ? "💬" : t === "announcement" ? "📢" : t === "bug" ? "🐞" : t === "bugreply" ? "🐞" : t === "celebrate" ? "👏" : "⚽";
     const bg = modal(`<h3>Notifications</h3>
       <div style="max-height:60vh;overflow-y:auto">
-        ${items.length ? items.map(n => `<div class="row" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
+        ${items.length ? items.map(n => `<div class="row notif-row" data-type="${esc(n.type)}" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)${n.type === "bugreply" ? ";cursor:pointer" : ""}">
           <span style="font-size:20px">${icon(n.type)}</span>
-          <div style="flex:1"><div style="font-size:14px">${esc(n.text)}</div><div class="muted" style="font-size:12px">${timeAgo(n.createdAt)} ago</div></div>
+          <div style="flex:1"><div style="font-size:14px">${esc(n.text)}</div><div class="muted" style="font-size:12px">${timeAgo(n.createdAt)} ago${n.type === "bugreply" ? " · tap to view" : ""}</div></div>
           ${n.read ? "" : `<span style="width:8px;height:8px;border-radius:50%;background:var(--zb-blue);flex:0 0 auto"></span>`}
         </div>`).join("") : `<div class="empty">${I.bell}<p>No notifications yet. You'll hear when someone guesses your fact, replies, or gives you a Goal.</p></div>`}
       </div>
       <div class="actions" style="margin-top:14px">${items.length ? `<button class="btn secondary" id="clr">Clear all</button>` : ""}<button class="btn" id="x">Close</button></div>`);
     bg.querySelector("#x").onclick = () => bg.remove();
+    // tapping an admin bug reply opens the user's bug thread
+    bg.querySelectorAll('.notif-row[data-type="bugreply"]').forEach(r => r.onclick = () => {
+      bg.remove(); tab = "more"; subScreen = subMyBugs; renderApp();
+    });
     const clr = bg.querySelector("#clr");
     if (clr) clr.onclick = () => { if (S.clearNotifications) S.clearNotifications(); bg.remove(); renderApp(); };
     if (S.unreadCount && S.unreadCount() > 0 && S.markAllRead) {
@@ -1204,13 +1261,17 @@
         <div class="center"><div style="font-weight:800;color:var(--muted);font-size:18px">${missed}</div><div class="muted" style="font-size:11px">missed</div></div>
       </div></div>`));
 
+    // Past results FIRST (newest at top) — that's what people check after a game —
+    // then the upcoming picks below.
+    if (finished.length) {
+      wrap.appendChild(h(`<div class="section-title">Past results — how your picks did</div>`));
+      finished.slice().sort((a, b) => new Date(b.kickoff) - new Date(a.kickoff))
+        .forEach(f => wrap.appendChild(matchCard(f, subPredictions)));
+    }
     if (upcoming.length) {
       wrap.appendChild(h(`<div class="section-title">Upcoming — tap to edit before kickoff</div>`));
-      upcoming.forEach(f => wrap.appendChild(matchCard(f, subPredictions)));
-    }
-    if (finished.length) {
-      wrap.appendChild(h(`<div class="section-title">Past results</div>`));
-      finished.forEach(f => wrap.appendChild(matchCard(f, subPredictions)));
+      upcoming.slice().sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff))
+        .forEach(f => wrap.appendChild(matchCard(f, subPredictions)));
     }
     setView(wrap);
   }
@@ -1339,8 +1400,10 @@
     // Report a bug
     const bugCard = h(`<div class="card"><div class="section-title" style="margin-top:0">Found a problem?</div>
       <p class="muted" style="font-size:13px;margin:0 0 10px">Spotted a bug or something off? Let the admin know — you can attach a screenshot.</p>
-      <button class="btn secondary" id="report-bug">🐞 Report a bug</button></div>`);
+      <button class="btn secondary" id="report-bug">🐞 Report a bug</button>
+      <button class="btn ghost" id="my-bugs" style="margin-top:6px">View my reports &amp; replies</button></div>`);
     bugCard.querySelector("#report-bug").onclick = openBugReport;
+    bugCard.querySelector("#my-bugs").onclick = subMyBugs;
     wrap.appendChild(bugCard);
 
     setView(wrap);
@@ -1370,6 +1433,61 @@
     };
   }
 
+  // Shared bug conversation: thread messages + a reply box (works for admin and reporter).
+  function bugThread(b, redraw) {
+    const wrap = h(`<div style="margin-top:10px"></div>`);
+    const msgs = (b.messages || []).slice().sort((a, c) => a.createdAt - c.createdAt);
+    if (msgs.length) {
+      const t = h(`<div class="bug-thread"></div>`);
+      msgs.forEach(m => {
+        const adminMsg = m.from === "admin";
+        t.appendChild(h(`<div class="bug-msg ${adminMsg ? "admin" : "user"}">
+          <div class="bug-msg-meta">${esc(m.name)}${adminMsg ? ` <span class="chip" style="padding:1px 6px;font-size:10px">admin</span>` : ""} · ${timeAgo(m.createdAt)} ago</div>
+          <div>${esc(m.text)}</div></div>`));
+      });
+      wrap.appendChild(t);
+    }
+    const box = h(`<div class="row" style="gap:8px;margin-top:8px">
+      <input class="input bug-reply-in" placeholder="Write a reply…" maxlength="500" style="flex:1;font-size:14px;padding:9px 12px">
+      <button class="btn sm bug-reply-send" style="width:auto">Reply</button></div>`);
+    const send = () => {
+      const inp = box.querySelector(".bug-reply-in"); const t = inp.value.trim(); if (!t) return;
+      const r = S.addBugMessage(b.id, t); if (r && r.error) return toast(r.error);
+      inp.value = ""; toast("Reply sent ✓"); if (redraw) redraw();
+    };
+    box.querySelector(".bug-reply-send").onclick = send;
+    box.querySelector(".bug-reply-in").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+    wrap.appendChild(box);
+    return wrap;
+  }
+
+  // The reporter's own bug reports + the back-and-forth with the admin.
+  function subMyBugs() {
+    subScreen = subMyBugs;
+    const wrap = h(`<div class="screen"></div>`);
+    wrap.appendChild(backHeader("My bug reports"));
+    const listWrap = h(`<div id="mybugs"></div>`);
+    wrap.appendChild(listWrap);
+    setView(wrap);
+    const draw = () => {
+      const bugs = S.myBugReports ? S.myBugReports() : [];
+      listWrap.innerHTML = "";
+      if (!bugs.length) { listWrap.appendChild(h(`<div class="empty">${I.info}<p>You haven't reported anything yet.</p></div>`)); return; }
+      bugs.forEach(b => {
+        const c = h(`<div class="card">
+          <div class="row between" style="margin-bottom:6px"><span class="chip">🐞 Your report</span><span class="muted" style="font-size:12px">${timeAgo(b.createdAt)} ago</span></div>
+          <div style="white-space:pre-wrap">${esc(b.text)}</div>
+          ${b.imageURL ? `<img src="${esc(b.imageURL)}" style="width:100%;border-radius:10px;margin-top:8px">` : ""}
+        </div>`);
+        c.appendChild(bugThread(b, draw));
+        listWrap.appendChild(c);
+      });
+    };
+    if (S.myBugReports && S.myBugReports().length) draw();
+    else listWrap.innerHTML = `<div class="muted center" style="padding:30px">Loading…</div>`;
+    if (S.myBugReportsLoad) S.myBugReportsLoad().then(draw); else draw();
+  }
+
   function subBugReports() {
     subScreen = subBugReports;
     const wrap = h(`<div class="screen"></div>`);
@@ -1387,9 +1505,11 @@
           <div style="white-space:pre-wrap">${esc(b.text)}</div>
           ${b.imageURL ? `<img src="${esc(b.imageURL)}" style="width:100%;border-radius:10px;margin-top:8px">` : ""}
           ${b.email ? `<div class="muted" style="font-size:12px;margin-top:6px">${esc(b.email)}</div>` : ""}
-          <button class="btn ghost sm bres" style="margin-top:8px">Mark resolved &amp; remove</button>
         </div>`);
-        c.querySelector(".bres").onclick = () => { S.resolveBug(b.id).then(draw); };
+        c.appendChild(bugThread(b, draw));
+        const res = h(`<button class="btn ghost sm bres" style="margin-top:10px">Mark resolved &amp; remove</button>`);
+        res.onclick = () => { S.resolveBug(b.id).then(draw); };
+        c.appendChild(res);
         listWrap.appendChild(c);
       });
     };

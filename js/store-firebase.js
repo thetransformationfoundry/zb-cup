@@ -39,6 +39,7 @@
     zbFacts: [],
     notifications: [],         // my in-app notifications
     bugReports: [],            // loaded on demand (admin only)
+    myBugReports: [],          // the current user's own reports (+ admin replies)
     cotd: null,                // today's Colleague of the Day record
     announcement: null,        // pinned admin announcement
     tournament: { winnerCountryCode: null }
@@ -355,7 +356,7 @@
       const g = { A: [], draw: [], B: [] };
       Object.keys(m).forEach(id => {
         const p = m[id], usr = cache.users[id];
-        const who = { id, name: (usr && usr.name) || "Someone", photoURL: (usr && usr.photoURL) || null };
+        const who = { id, name: (usr && usr.name) || "Someone", photoURL: (usr && usr.photoURL) || null, winner: p.winner, scoreA: p.scoreA, scoreB: p.scoreB };
         (g[p.winner === "A" ? "A" : p.winner === "B" ? "B" : "draw"]).push(who);
       });
       return g;
@@ -537,12 +538,29 @@
     },
     deleteZbFact(id) { db.collection("zbFacts").doc(id).delete(); },
 
-    /* --- bug reports --- */
+    /* --- bug reports (two-way thread) --- */
     submitBug(text, imageURL) {
       const u = me(); if (!u) return { error: "Not signed in" };
-      db.collection("bugReports").add({ userId: u.id, name: u.name, email: u.email || "", text, imageURL: imageURL || null, createdAt: now(), resolved: false });
+      db.collection("bugReports").add({ userId: u.id, name: u.name, email: u.email || "", text, imageURL: imageURL || null, messages: [], createdAt: now(), resolved: false });
       Object.values(cache.users).filter(x => x.isAdmin && x.id !== u.id).forEach(a => notify(a.id, "bug", `${u.name} reported a bug 🐞`));
       return { ok: true };
+    },
+    // Append a reply to a bug thread (works for both admin and the reporter) + notify the other side.
+    addBugMessage(bugId, text) {
+      const u = me(); if (!u) return { error: "Not signed in" };
+      const t = (text || "").trim(); if (!t) return { error: "Empty message" };
+      const fromAdmin = this.isAdmin();
+      const msg = { from: fromAdmin ? "admin" : "user", name: u.name, text: t, createdAt: now() };
+      db.collection("bugReports").doc(bugId).update({ messages: FV.arrayUnion(msg) }).catch(() => {});
+      const apply = arr => { const b = (arr || []).find(x => x.id === bugId); if (b) b.messages = (b.messages || []).concat(msg); };
+      apply(cache.bugReports); apply(cache.myBugReports);          // optimistic
+      if (fromAdmin) {
+        const b = (cache.bugReports || []).find(x => x.id === bugId) || (cache.myBugReports || []).find(x => x.id === bugId);
+        if (b && b.userId) notify(b.userId, "bugreply", "An admin replied to your bug report 🐞");
+      } else {
+        Object.values(cache.users).filter(x => x.isAdmin && x.id !== u.id).forEach(a => notify(a.id, "bug", `${u.name} replied on a bug report 🐞`));
+      }
+      refresh(); return { ok: true };
     },
     bugReportsLoad() { // admin: fetch on demand (non-admins can't read these). NO refresh() — avoids a render loop.
       return db.collection("bugReports").orderBy("createdAt", "desc").get()
@@ -550,6 +568,14 @@
         .catch(() => {});
     },
     bugReports() { return cache.bugReports || []; },
+    // The current user's own reports (rules let an owner read their own). Sorted newest-first client-side.
+    myBugReportsLoad() {
+      if (!cache.uid) return Promise.resolve();
+      return db.collection("bugReports").where("userId", "==", cache.uid).get()
+        .then(s => { cache.myBugReports = s.docs.map(d => Object.assign({ id: d.id }, d.data())).sort((a, b) => b.createdAt - a.createdAt); })
+        .catch(() => {});
+    },
+    myBugReports() { return cache.myBugReports || []; },
     resolveBug(id) { return db.collection("bugReports").doc(id).delete().then(() => this.bugReportsLoad()).catch(() => {}); },
 
     /* --- announcement (admin pinned post) --- */

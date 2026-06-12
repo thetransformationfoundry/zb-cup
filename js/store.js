@@ -237,7 +237,7 @@
       const g = { A: [], draw: [], B: [] };
       Object.keys(preds).forEach(id => {
         const p = preds[id], usr = s.users[id];
-        const who = { id, name: (usr && usr.name) || "Someone", photoURL: (usr && usr.photoURL) || null };
+        const who = { id, name: (usr && usr.name) || "Someone", photoURL: (usr && usr.photoURL) || null, winner: p.winner, scoreA: p.scoreA, scoreB: p.scoreB };
         (g[p.winner === "A" ? "A" : p.winner === "B" ? "B" : "draw"]).push(who);
       });
       return g;
@@ -408,15 +408,30 @@
     },
     deleteZbFact(id) { const s = get(); s.zbFacts = s.zbFacts.filter(f => f.id !== id); save(); },
 
-    /* --- bug reports --- */
+    /* --- bug reports (two-way thread) --- */
     submitBug(text, imageURL) {
       const s = get(); const me = this.currentUser(); if (!me) return { error: "Not signed in" };
-      (s.bugReports = s.bugReports || []).push({ id: uid(), userId: me.id, name: me.name, email: me.email || "", text, imageURL: imageURL || null, createdAt: now(), resolved: false });
+      (s.bugReports = s.bugReports || []).push({ id: uid(), userId: me.id, name: me.name, email: me.email || "", text, imageURL: imageURL || null, messages: [], createdAt: now(), resolved: false });
       Object.values(s.users).filter(x => x.isAdmin && x.id !== me.id).forEach(a => notify(a.id, "bug", `${me.name} reported a bug 🐞`));
+      save(); return { ok: true };
+    },
+    addBugMessage(bugId, text) {
+      const s = get(); const me = this.currentUser(); if (!me) return { error: "Not signed in" };
+      const t = (text || "").trim(); if (!t) return { error: "Empty message" };
+      const b = (s.bugReports || []).find(x => x.id === bugId); if (!b) return { error: "Not found" };
+      const fromAdmin = this.isAdmin();
+      b.messages = (b.messages || []).concat({ from: fromAdmin ? "admin" : "user", name: me.name, text: t, createdAt: now() });
+      if (fromAdmin) notify(b.userId, "bugreply", "An admin replied to your bug report 🐞");
+      else Object.values(s.users).filter(x => x.isAdmin && x.id !== me.id).forEach(a => notify(a.id, "bug", `${me.name} replied on a bug report 🐞`));
       save(); return { ok: true };
     },
     bugReportsLoad() { return Promise.resolve(); },
     bugReports() { return (get().bugReports || []).slice().sort((a, b) => b.createdAt - a.createdAt); },
+    myBugReportsLoad() { return Promise.resolve(); },
+    myBugReports() {
+      const s = get(); const me = this.currentUser(); if (!me) return [];
+      return (s.bugReports || []).filter(b => b.userId === me.id).sort((a, b) => b.createdAt - a.createdAt);
+    },
     resolveBug(id) { const s = get(); s.bugReports = (s.bugReports || []).filter(b => b.id !== id); save(); return Promise.resolve(); },
 
     /* --- announcement (admin pinned post) --- */
