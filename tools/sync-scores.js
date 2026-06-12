@@ -187,22 +187,24 @@ async function runDryRun(demo) {
 
 /* ---- mode: --write — actually set results + award points (group stage only) ---- */
 async function runWrite() {
-  let admin;
-  try { admin = require("firebase-admin"); }
-  catch (e) { console.error("firebase-admin not installed (the GitHub Action installs it automatically)."); process.exit(1); }
-  // Two ways to authenticate:
-  //  • keyless (default): Application Default Credentials provided by the GitHub Action's
-  //    Workload Identity sign-in — no key stored anywhere.
+  // Talk to Firestore via @google-cloud/firestore directly (bundled with firebase-admin).
+  // It authenticates with google-auth-library, which DOES understand the keyless
+  // (Workload Identity / external_account) credentials — firebase-admin's own reader doesn't.
+  let Firestore, FieldValue;
+  try { ({ Firestore, FieldValue } = require("@google-cloud/firestore")); }
+  catch (e) { console.error("Firestore library not installed (the GitHub Action installs firebase-admin, which includes it)."); process.exit(1); }
+  // Auth:
+  //  • keyless (default): Application Default Credentials from the Action's Google sign-in.
   //  • key (optional): a FIREBASE_SERVICE_ACCOUNT JSON, if your org ever allows keys.
+  const opts = { projectId: process.env.GCP_PROJECT || "zb-cup" };
   const saRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (saRaw) {
     let sa; try { sa = JSON.parse(saRaw); } catch (e) { console.error("FIREBASE_SERVICE_ACCOUNT is not valid JSON."); process.exit(1); }
-    admin.initializeApp({ credential: admin.credential.cert(sa) });
-  } else {
-    admin.initializeApp({ credential: admin.credential.applicationDefault(), projectId: process.env.GCP_PROJECT || undefined });
+    opts.projectId = sa.project_id || opts.projectId;
+    opts.credentials = { client_email: sa.client_email, private_key: sa.private_key };
   }
-  const db = admin.firestore();
-  const FV = admin.firestore.FieldValue;
+  const db = new Firestore(opts);
+  const FV = FieldValue;
 
   const matches = (await api("/competitions/WC/matches")).matches || [];
   // ONLY group-stage games that are finished in regular time (knockouts/extra-time stay manual)
