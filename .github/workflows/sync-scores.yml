@@ -1,0 +1,29 @@
+name: ZB Cup — auto scores
+
+# Runs the score sync. Scheduled runs WRITE results; a manual run defaults to a
+# safe dry-run (no writes) so you can test first.
+on:
+  schedule:
+    - cron: "*/15 * * * *"        # every 15 minutes (GitHub may run a little late — fine for final scores)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no writes)"
+        type: boolean
+        default: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install firebase-admin@^12
+      - name: Run score sync
+        env:
+          FD_API_KEY: ${{ secrets.FD_API_KEY }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        # manual dry-run → no flag; scheduled or manual non-dry-run → --write
+        run: node tools/sync-scores.js ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '' || '--write' }}
