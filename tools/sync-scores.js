@@ -213,6 +213,7 @@ async function runWrite() {
   console.log(`\nLIVE WRITE — ${todo.length} finished group-stage match(es) to consider.\n`);
 
   let wrote = 0, skipped = 0, unmatched = 0;
+  const scoredNow = [];
   for (const m of todo) {
     const r = proposeForMatch(m);
     if (!r.matched) { unmatched++; console.log("  ✗ unmatched:", JSON.stringify(r.unmatched || r.skip)); continue; }
@@ -238,8 +239,18 @@ async function runWrite() {
     });
     await batch.commit();
     wrote++;
+    scoredNow.push(r.matched.label);
     console.log(`  ✓ ${id} → ${scoreA}-${scoreB}  (scored ${scoredPreds} prediction(s))`);
   }
+
+  // Heartbeat so the app's Admin screen can show "last ran / what it did".
+  try {
+    await db.collection("tournament").doc("autoSync").set({
+      lastRunAt: Date.now(), lastResult: "ok",
+      newlyScored: wrote, alreadyDone: skipped, unmatched: unmatched, scored: scoredNow
+    }, { merge: true });
+  } catch (e) { console.error("(heartbeat write failed)", e.message); }
+
   console.log(`\nDone. ${wrote} newly scored, ${skipped} already done, ${unmatched} unmatched.\n`);
 }
 
