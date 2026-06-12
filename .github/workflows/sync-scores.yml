@@ -1,7 +1,7 @@
 name: ZB Cup — auto scores
 
-# Runs the score sync. Scheduled runs WRITE results; a manual run defaults to a
-# safe dry-run (no writes) so you can test first.
+# Scheduled runs WRITE results; a manual run defaults to a safe dry-run (no writes).
+# Auth to Google is KEYLESS (Workload Identity Federation) — no service-account key is stored.
 on:
   schedule:
     - cron: "*/15 * * * *"        # every 15 minutes (GitHub may run a little late — fine for final scores)
@@ -12,18 +12,33 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+  id-token: write                 # required for keyless Google sign-in
+
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Keyless sign-in to Google. Skipped on a manual dry-run (which never writes),
+      # so you can test the matching with just FD_API_KEY before WIF is set up.
+      - name: Sign in to Google (keyless)
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
       - run: npm install firebase-admin@^12
+
       - name: Run score sync
         env:
           FD_API_KEY: ${{ secrets.FD_API_KEY }}
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GCP_PROJECT: zb-cup
         # manual dry-run → no flag; scheduled or manual non-dry-run → --write
         run: node tools/sync-scores.js ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '' || '--write' }}
