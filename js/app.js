@@ -767,7 +767,7 @@
     }
 
     if (tbd && !finished) {
-      area.appendChild(h(`<div class="divider"></div><p class="muted center" style="font-size:13px;margin:0">Teams confirmed after the group stage.</p>`));
+      area.appendChild(h(`<div><div class="divider"></div><p class="muted center" style="font-size:13px;margin:0">Teams confirmed after the group stage.</p></div>`));
       if (S.isAdmin()) area.appendChild(adminScoreBtn(f));
       return card;
     }
@@ -778,12 +778,24 @@
         const winOk = pred.winner === realWinner;
         const scoreOk = pred.scoreA === f.result.scoreA && pred.scoreB === f.result.scoreB;
         const pts = (winOk ? 5 : 0) + (scoreOk ? 5 : 0);
-        area.appendChild(h(`<div class="divider"></div>
-          <div class="row between"><span class="muted" style="font-size:13px">Your pick: ${pred.scoreA}–${pred.scoreB}</span>
-          <span class="chip ${pts ? "good" : "grey"}">${pts ? "+" + pts + " pts" : "0 pts"}</span></div>
-          <div style="font-size:12px;margin-top:6px" class="muted">${winOk ? "✅ Winner" : "❌ Winner"} · ${scoreOk ? "✅ Exact score" : "❌ Exact score"}</div>`));
+        const headline = pts === 10 ? "🎯 Perfect! You nailed the winner and the exact score."
+          : pts === 5 ? "✅ Nice — you called the winner."
+          : "❌ Missed this one.";
+        area.appendChild(h(`<div>
+          <div class="divider"></div>
+          <div class="result-summary ${pts ? (pts === 10 ? "perfect" : "good") : "miss"}">
+            <div class="row between" style="align-items:flex-start">
+              <div>
+                <div style="font-weight:700;font-size:14px">${esc(headline)}</div>
+                <div class="muted" style="font-size:13px;margin-top:4px">Result <b style="color:var(--ink)">${f.result.scoreA}–${f.result.scoreB}</b> · your pick <b style="color:var(--ink)">${pred.scoreA}–${pred.scoreB}</b></div>
+              </div>
+              <span class="chip ${pts ? (pts === 10 ? "gold" : "good") : "grey"}" style="flex:0 0 auto">${pts ? "+" + pts + " pts" : "0 pts"}</span>
+            </div>
+            <div style="font-size:12px;margin-top:8px" class="muted">${winOk ? "✅" : "❌"} Winner (5) · ${scoreOk ? "✅" : "❌"} Exact score (5)</div>
+          </div>
+        </div>`));
       } else {
-        area.appendChild(h(`<div class="divider"></div><p class="muted center" style="font-size:13px;margin:0">You didn't predict this one.</p>`));
+        area.appendChild(h(`<div><div class="divider"></div><p class="muted center" style="font-size:13px;margin:0">You didn't predict this one.</p></div>`));
       }
       // admin can re-score
       if (S.isAdmin()) area.appendChild(adminScoreBtn(f));
@@ -791,7 +803,7 @@
     }
 
     if (kicked) { // kicked off but no result yet — predictions closed
-      area.appendChild(h(`<div class="divider"></div><p class="muted center" style="font-size:13px;margin:0">${pred ? "Your pick: " + pred.scoreA + "–" + pred.scoreB + " · locked at kickoff" : "Predictions closed at kickoff."}</p>`));
+      area.appendChild(h(`<div><div class="divider"></div><p class="muted center" style="font-size:13px;margin:0">${pred ? "Your pick: " + pred.scoreA + "–" + pred.scoreB + " · locked at kickoff" : "Predictions closed at kickoff."}</p></div>`));
       if (S.isAdmin()) area.appendChild(adminScoreBtn(f));
       return card;
     }

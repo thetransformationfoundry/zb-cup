@@ -292,6 +292,12 @@ textarea.input { resize: vertical; min-height: 80px; }
 .bug-msg.user { background: #F1F3F6; align-self: flex-start; border-bottom-left-radius: 4px; }
 .bug-msg.admin { background: var(--zb-blue-soft); align-self: flex-end; border-bottom-right-radius: 4px; }
 
+/* finished prediction result summary (My Predictions + finished cards) */
+.result-summary { border-radius: 12px; padding: 11px 13px; }
+.result-summary.perfect { background: #FBF3D7; }
+.result-summary.good { background: #E7F6EE; }
+.result-summary.miss { background: #F1F3F6; }
+
 /* ---------- live now ---------- */
 .live-chip { background: var(--bad); color: #fff; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
 .live-chip.on { box-shadow: 0 0 0 2px rgba(214,69,69,.35); }
