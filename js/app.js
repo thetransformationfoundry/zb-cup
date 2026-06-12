@@ -205,6 +205,7 @@
     more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>',
     chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>',
     crown: '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" style="vertical-align:-2px"><path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><path d="M5 13l4 4L19 7"/></svg>',
     bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg>',
     clap: '<svg viewBox="0 0 181.293 181.18" width="1em" height="1em" fill="currentColor" style="vertical-align:-0.15em"><path d="M144.952,143.532,93.417,173.439c-21.72,12.605-48.612,9.855-66.124-8.538A53.054,53.054,0,0,1,.754,127.512c-2.776-17.34,2.147-34.249,14.228-46.45L38.419,57.389c4.172-4.213,11.094-4.432,15.055.57,1.7,2.151,2.931,5.219,4.241,8.449L81.094,43.087a13.413,13.413,0,0,1,12.912-3.518c4.459,1.229,7.354,4.532,9.411,9.445l4.767-4.768c5.75-5.751,13.761-6.82,19.369-1.79,6.281,5.632,5.191,14.683-.378,20.469a16.321,16.321,0,0,1,9.248,9.272c6.87-5.787,16.259-4.993,20.913,2.073,4.216,6.4,1.856,15.41-6.031,19.605,4.139,2.888,6.567,6.7,6.557,11.284a13.605,13.605,0,0,1-6.21,11.384l-7.1,4.373c3.639,2.714,6.147,6.224,6.4,10.282.276,4.462-1.414,9.675-6,12.334M87.97,121.037,129,80.044c1.791-3.294,1.584-7.232-.862-9.447a7.179,7.179,0,0,0-8.767-.263L78.356,111.4c-1.266.427-4.127.523-4.467-.54a12,12,0,0,1-.035-3.953l50.5-50.455c1.992-3.477,1.385-7.789-1.348-9.718a7.015,7.015,0,0,0-9.315.992l-49.466,49.5c-1.148.31-3.567.433-4.209-.253s-.785-2.27-.758-3.7L95.267,57.283a7.015,7.015,0,0,0,0-9.91,6.915,6.915,0,0,0-9.8.161L31.023,102c-1.344.4-3.7.107-4.379-.719s-.47-3.356.287-4.111L48.139,76.021A11.153,11.153,0,0,0,51.2,67.593,9.612,9.612,0,0,0,45.218,59.8L18.56,86.507a47.008,47.008,0,0,0,.287,63.926c17.676,18.917,47.877,19.987,66.29,1.646l43.534-43.36a7.206,7.206,0,0,0,.216-9.729c-2.254-2.305-6.6-3.4-9.529-.473L92.473,125.355c-.878.876-4.59.636-4.57-.464Zm47.235-25.162L150.092,87.1c3.684-2.172,3.881-7.828,1.167-10.479-4.741-4.63-13.7-.145-17.6,7.18l-6.031,6.93Zm-17.467,32.888,31.127-17.883c3.553-2.042,3.28-7.787,1.122-10.07-4.6-4.862-12.658-.156-12.883,2.163-.275,2.822-1.738,7.978-3.9,9.967ZM49.281,171.856c13.56,5.6,28.2,3.5,40.8-3.783l51.88-29.974c2.916-2.736,3.607-6.831,1.5-9.816a7.1,7.1,0,0,0-8.915-1.777L99.094,146.947,87.436,158.423c-10.061,9.9-23.569,12.882-38.155,13.433"/><path d="M159.923,35.149c-.918.351-3.386.586-4.28.107-1.073-.575-.779-3.384-.151-4.606L176.169,9.932c.927-.254,3.441-.334,4.241.214.96.657.786,3.122.234,4.26Z"/><path d="M74.551,23.29a5.549,5.549,0,0,1-.643,4.235c-.731.833-4.157.347-4.64-.771L59.647,4.464c-.474-1.1.75-3.958,1.784-4.371s3.443.615,3.944,1.785Z"/><path d="M146.709,32.473c-.582,1.166-3.188,2.234-4.195,1.78s-2.121-3.184-1.607-4.217l9.39-18.875c.533-1.071,3.372-1.989,4.4-1.443s1.833,3.081,1.227,4.295Z"/><path d="M61.8,29.229c.806,1,.47,3.93-.4,4.592s-3.647.411-4.375-.5L44.532,17.716c-.636-.8-.633-3.157-.22-4.033.5-1.052,3.883-1.347,4.648-.4Z"/><path d="M164.461,49.391c-1.02.612-3.875.325-4.6-.5s-.316-3.893.667-4.483l16.284-9.769c1.051-.631,4.186.617,4.435,1.727a4.824,4.824,0,0,1-1.674,3.95Z"/><path d="M87.574,24.509c0,1.277-1.463,3.474-2.528,3.666-1.473.266-3.8-1.693-3.8-3.261l.01-18.5c0-1.118,1.782-3.27,2.857-3.373,1.3-.126,3.457,1.941,3.457,3.374Z"/></svg>',
     camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M3 8a2 2 0 012-2h2l1.5-2h7L18 6h2a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg>',
@@ -778,20 +779,28 @@
         const winOk = pred.winner === realWinner;
         const scoreOk = pred.scoreA === f.result.scoreA && pred.scoreB === f.result.scoreB;
         const pts = (winOk ? 5 : 0) + (scoreOk ? 5 : 0);
-        const headline = pts === 10 ? "🎯 Perfect! You nailed the winner and the exact score."
-          : pts === 5 ? "✅ Nice — you called the winner."
-          : "❌ Missed this one.";
+        const headline = pts === 10 ? "Perfect! You nailed the winner and the exact score."
+          : pts === 5 ? "Called the winner."
+          : "Missed this one.";
+        const stateIco = pts ? `<span class="result-ico gold">${I.crown}</span>` : `<span class="result-dot"></span>`;
+        const tick = ok => ok ? `<span class="r-yes">${I.check}</span>` : `<span class="r-no"></span>`;
         area.appendChild(h(`<div>
           <div class="divider"></div>
           <div class="result-summary ${pts ? (pts === 10 ? "perfect" : "good") : "miss"}">
             <div class="row between" style="align-items:flex-start">
-              <div>
-                <div style="font-weight:700;font-size:14px">${esc(headline)}</div>
-                <div class="muted" style="font-size:13px;margin-top:4px">Result <b style="color:var(--ink)">${f.result.scoreA}–${f.result.scoreB}</b> · your pick <b style="color:var(--ink)">${pred.scoreA}–${pred.scoreB}</b></div>
+              <div class="row" style="gap:9px;align-items:flex-start">
+                ${stateIco}
+                <div>
+                  <div style="font-weight:700;font-size:14px">${esc(headline)}</div>
+                  <div class="muted" style="font-size:13px;margin-top:4px">Result <b style="color:var(--ink)">${f.result.scoreA}–${f.result.scoreB}</b> · your pick <b style="color:var(--ink)">${pred.scoreA}–${pred.scoreB}</b></div>
+                  <div class="row" style="gap:14px;margin-top:7px;font-size:12px">
+                    <span class="row" style="gap:5px">${tick(winOk)}<span class="muted">Winner (5)</span></span>
+                    <span class="row" style="gap:5px">${tick(scoreOk)}<span class="muted">Exact (5)</span></span>
+                  </div>
+                </div>
               </div>
               <span class="chip ${pts ? (pts === 10 ? "gold" : "good") : "grey"}" style="flex:0 0 auto">${pts ? "+" + pts + " pts" : "0 pts"}</span>
             </div>
-            <div style="font-size:12px;margin-top:8px" class="muted">${winOk ? "✅" : "❌"} Winner (5) · ${scoreOk ? "✅" : "❌"} Exact score (5)</div>
           </div>
         </div>`));
       } else {

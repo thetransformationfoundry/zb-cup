@@ -297,6 +297,11 @@ textarea.input { resize: vertical; min-height: 80px; }
 .result-summary.perfect { background: #FBF3D7; }
 .result-summary.good { background: #E7F6EE; }
 .result-summary.miss { background: #F1F3F6; }
+.result-ico { display: inline-flex; line-height: 0; flex: 0 0 auto; margin-top: 1px; }
+.result-ico.gold svg { width: 18px; height: 18px; color: var(--gold); }
+.result-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--bad); flex: 0 0 auto; display: inline-block; margin-top: 3px; }
+.r-yes { display: inline-flex; line-height: 0; color: var(--good); flex: 0 0 auto; }
+.r-no { width: 8px; height: 8px; border-radius: 50%; background: #C7CDD6; display: inline-block; flex: 0 0 auto; }
 
 /* ---------- live now ---------- */
 .live-chip { background: var(--bad); color: #fff; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
