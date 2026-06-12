@@ -25,7 +25,7 @@ jobs:
       # Keyless sign-in to Google. Skipped on a manual dry-run (which never writes),
       # so you can test the matching with just FD_API_KEY before WIF is set up.
       - name: Sign in to Google (keyless)
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.dry_run != 'true' }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
@@ -41,4 +41,4 @@ jobs:
           FD_API_KEY: ${{ secrets.FD_API_KEY }}
           GCP_PROJECT: zb-cup
         # manual dry-run → no flag; scheduled or manual non-dry-run → --write
-        run: node tools/sync-scores.js ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '' || '--write' }}
+        run: node tools/sync-scores.js ${{ (github.event_name == 'schedule' || github.event.inputs.dry_run != 'true') && '--write' || '' }}
