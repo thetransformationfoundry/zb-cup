@@ -436,6 +436,8 @@
 
     /* --- announcement (admin pinned post) --- */
     announcement() { return get().announcement; },
+    // demo sample so the Admin status card renders in preview
+    autoSyncStatus() { return { lastRunAt: now() - 6 * 60000, lastResult: "ok", newlyScored: 0, alreadyDone: 2, unmatched: 0, scored: [] }; },
     toggleAnnouncementGoal() {
       const s = get(); const me = this.currentUser(); if (!s.announcement || !me) return;
       s.announcement.goaledBy = s.announcement.goaledBy || [];

@@ -42,6 +42,7 @@
     myBugReports: [],          // the current user's own reports (+ admin replies)
     cotd: null,                // today's Colleague of the Day record
     announcement: null,        // pinned admin announcement
+    autoSync: null,            // auto-scorer heartbeat (last run / what it did)
     tournament: { winnerCountryCode: null }
   };
 
@@ -142,6 +143,10 @@
     });
     db.doc("tournament/announcement").onSnapshot(d => {
       cache.announcement = (d.exists && d.data().text) ? d.data() : null;
+      refresh();
+    });
+    db.doc("tournament/autoSync").onSnapshot(d => {
+      cache.autoSync = d.exists ? d.data() : null;
       refresh();
     });
     // my predictions + my guesses (scoped to me)
@@ -580,6 +585,7 @@
 
     /* --- announcement (admin pinned post) --- */
     announcement() { return cache.announcement; },
+    autoSyncStatus() { return cache.autoSync; },
     toggleAnnouncementGoal() {
       const u = me(); if (!u || !cache.announcement) return;
       const on = (cache.announcement.goaledBy || []).includes(u.id);

@@ -1552,6 +1552,21 @@
     wrap.appendChild(backHeader("Admin tools"));
     wrap.appendChild(h(`<p class="sub">Your hub: enter scores daily, post ZB facts, manage players.</p>`));
 
+    /* Auto-scores heartbeat (written by the GitHub Action; group-stage results fill in automatically) */
+    const as = S.autoSyncStatus ? S.autoSyncStatus() : null;
+    if (!as) {
+      wrap.appendChild(h(`<div class="card"><div class="section-title" style="margin-top:0">🤖 Auto-scores</div>
+        <p class="muted" style="font-size:13px;margin:0">No automatic runs recorded yet. It checks every ~15 min and fills in finished group-stage results (your manual entry still works as a backup).</p></div>`));
+    } else {
+      const stale = (Date.now() - (as.lastRunAt || 0)) > 60 * 60 * 1000;
+      const scored = as.scored || [];
+      const scoredLine = scored.length ? "Last scored: " + scored.join(", ") : "No new games needed scoring on the last run.";
+      wrap.appendChild(h(`<div class="card"><div class="section-title" style="margin-top:0">🤖 Auto-scores</div>
+        <div style="font-weight:600">${stale ? "🔴" : "🟢"} Last ran ${timeAgo(as.lastRunAt)} ago</div>
+        <div class="muted" style="font-size:13px;margin-top:4px">${esc(scoredLine)}</div>
+        ${stale ? `<div style="color:var(--bad);font-size:13px;margin-top:6px;font-weight:600">No successful run in over an hour — check it's still running (GitHub → Actions tab).</div>` : ""}</div>`));
+    }
+
     /* A — Results to enter (the daily workflow) */
     const toEnter = S.resultsToEnter();
     const secA = h(`<div class="card"><div class="section-title" style="margin-top:0">⚽ Results to enter ${toEnter.length ? `<span class="chip">${toEnter.length}</span>` : ""}</div><div id="te"></div></div>`);
