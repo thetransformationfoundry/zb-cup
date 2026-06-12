@@ -1629,8 +1629,8 @@
     secC.appendChild(cb); secC.appendChild(mb);
     wrap.appendChild(secC);
 
-    /* D — Players (block / unblock) */
-    const secD = h(`<div class="card"><div class="section-title" style="margin-top:0">Players</div><div id="pl"></div></div>`);
+    /* D — Players (block / unblock) — collapsed by default */
+    const secD = h(`<details class="card"><summary style="font-weight:600;cursor:pointer;color:var(--zb-blue)">Players (${S.allUsers().length}) — block / edit</summary><div id="pl" style="margin-top:10px"></div></details>`);
     const pl = secD.querySelector("#pl");
     S.allUsers().forEach(u => {
       // Empty account (0 pts, no country, no facts) — either brand-new or possibly reset. Worth a look.
