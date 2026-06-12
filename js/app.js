@@ -1053,11 +1053,12 @@
   function openNotifications() {
     const items = S.notifications ? S.notifications() : [];
     const icon = t => t === "guess" ? "👑" : t === "reply" ? "💬" : t === "announcement" ? "📢" : t === "bug" ? "🐞" : t === "bugreply" ? "🐞" : t === "celebrate" ? "👏" : "⚽";
+    const tappable = t => t === "bugreply" || t === "announcement";
     const bg = modal(`<h3>Notifications</h3>
       <div style="max-height:60vh;overflow-y:auto">
-        ${items.length ? items.map(n => `<div class="row notif-row" data-type="${esc(n.type)}" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)${n.type === "bugreply" ? ";cursor:pointer" : ""}">
+        ${items.length ? items.map(n => `<div class="row notif-row" data-type="${esc(n.type)}" style="gap:10px;padding:10px 0;border-bottom:1px solid var(--line)${tappable(n.type) ? ";cursor:pointer" : ""}">
           <span style="font-size:20px">${icon(n.type)}</span>
-          <div style="flex:1"><div style="font-size:14px">${esc(n.text)}</div><div class="muted" style="font-size:12px">${timeAgo(n.createdAt)} ago${n.type === "bugreply" ? " · tap to view" : ""}</div></div>
+          <div style="flex:1"><div style="font-size:14px">${esc(n.text)}</div><div class="muted" style="font-size:12px">${timeAgo(n.createdAt)} ago${tappable(n.type) ? " · tap to view" : ""}</div></div>
           ${n.read ? "" : `<span style="width:8px;height:8px;border-radius:50%;background:var(--zb-blue);flex:0 0 auto"></span>`}
         </div>`).join("") : `<div class="empty">${I.bell}<p>No notifications yet. You'll hear when someone guesses your fact, replies, or gives you a Goal.</p></div>`}
       </div>
@@ -1066,6 +1067,11 @@
     // tapping an admin bug reply opens the user's bug thread
     bg.querySelectorAll('.notif-row[data-type="bugreply"]').forEach(r => r.onclick = () => {
       bg.remove(); tab = "more"; subScreen = subMyBugs; renderApp();
+    });
+    // tapping an announcement jumps to Chat (where it's pinned at the top) and expands it
+    bg.querySelectorAll('.notif-row[data-type="announcement"]').forEach(r => r.onclick = () => {
+      bg.remove(); tab = "chat"; subScreen = null; annExpanded = true; renderApp();
+      setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 60);
     });
     const clr = bg.querySelector("#clr");
     if (clr) clr.onclick = () => { if (S.clearNotifications) S.clearNotifications(); bg.remove(); renderApp(); };
