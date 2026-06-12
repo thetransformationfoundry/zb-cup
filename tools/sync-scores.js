@@ -190,10 +190,17 @@ async function runWrite() {
   let admin;
   try { admin = require("firebase-admin"); }
   catch (e) { console.error("firebase-admin not installed (the GitHub Action installs it automatically)."); process.exit(1); }
+  // Two ways to authenticate:
+  //  • keyless (default): Application Default Credentials provided by the GitHub Action's
+  //    Workload Identity sign-in — no key stored anywhere.
+  //  • key (optional): a FIREBASE_SERVICE_ACCOUNT JSON, if your org ever allows keys.
   const saRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!saRaw) { console.error("FIREBASE_SERVICE_ACCOUNT secret not set."); process.exit(1); }
-  let sa; try { sa = JSON.parse(saRaw); } catch (e) { console.error("FIREBASE_SERVICE_ACCOUNT is not valid JSON."); process.exit(1); }
-  admin.initializeApp({ credential: admin.credential.cert(sa) });
+  if (saRaw) {
+    let sa; try { sa = JSON.parse(saRaw); } catch (e) { console.error("FIREBASE_SERVICE_ACCOUNT is not valid JSON."); process.exit(1); }
+    admin.initializeApp({ credential: admin.credential.cert(sa) });
+  } else {
+    admin.initializeApp({ credential: admin.credential.applicationDefault(), projectId: process.env.GCP_PROJECT || undefined });
+  }
   const db = admin.firestore();
   const FV = admin.firestore.FieldValue;
 
