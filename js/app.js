@@ -706,7 +706,7 @@
     let list = all.slice().sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
     if (matchFilter === "live") list = list.filter(isLive);
     else if (matchFilter === "upcoming") list = list.filter(f => f.status !== "finished");
-    else if (matchFilter === "finished") list = list.filter(f => f.status === "finished");
+    else if (matchFilter === "finished") list = list.filter(f => f.status === "finished").reverse(); // newest results first
     else if (matchFilter === "myteam") list = list.filter(f => myCode && (f.teamA.code === myCode || f.teamB.code === myCode));
 
     if (!list.length) wrap.appendChild(h(`<div class="empty">${I.ball}<p>${matchFilter === "myteam" ? "Your team's fixtures will appear here." : matchFilter === "live" ? "No matches are live right now." : "No matches here yet."}</p></div>`));
