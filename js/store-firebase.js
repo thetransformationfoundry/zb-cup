@@ -586,6 +586,15 @@
     /* --- announcement (admin pinned post) --- */
     announcement() { return cache.announcement; },
     autoSyncStatus() { return cache.autoSync; },
+    // Admin: trigger the auto-scorer Cloud Function on demand. Returns the run summary.
+    runScoresNow() {
+      try {
+        if (!firebase.functions) return Promise.resolve({ error: "Please refresh the app to enable this." });
+        return firebase.functions().httpsCallable("runScoresNow")()
+          .then(r => r.data)
+          .catch(e => ({ error: (e && e.message) || "Couldn't run the scorer." }));
+      } catch (e) { return Promise.resolve({ error: "Couldn't run the scorer." }); }
+    },
     toggleAnnouncementGoal() {
       const u = me(); if (!u || !cache.announcement) return;
       const on = (cache.announcement.goaledBy || []).includes(u.id);
