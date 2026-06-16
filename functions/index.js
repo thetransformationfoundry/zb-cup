@@ -9,7 +9,7 @@
    Auth to Firestore is automatic (runs as the project service account — no key).
    The football-data key is a Firebase secret (FD_API_KEY).
    ============================================================ */
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
@@ -99,15 +99,23 @@ async function syncScores(apiKey, trigger) {
   return { newlyScored: wrote, alreadyDone: skipped, unmatched, scored: scoredNow };
 }
 
-/* ---- the Admin button calls this ---- */
-exports.runScoresNow = onCall({ secrets: [FD_API_KEY], region: "us-central1" }, async (req) => {
-  const email = ((req.auth && req.auth.token && req.auth.token.email) || "").toLowerCase();
-  if (!req.auth || !ADMIN_EMAILS.includes(email)) {
-    throw new HttpsError("permission-denied", "Admins only.");
+/* ---- the Admin "Run scores now" button writes tournament/syncRequest; this runs the sync.
+   A Firestore trigger (not a public HTTP endpoint) sidesteps the org policy that blocks
+   publicly-invokable callable functions. Only admins can write that doc (Firestore rules),
+   so the request is already authorised by the time we get here. ---- */
+exports.onSyncRequested = onDocumentWritten(
+  { document: "tournament/syncRequest", secrets: [FD_API_KEY], region: "us-central1" },
+  async (event) => {
+    const after = event.data && event.data.after;
+    if (!after || !after.exists) return;        // ignore deletes
+    try {
+      await syncScores(FD_API_KEY.value(), "manual");
+    } catch (e) {
+      await db.collection("tournament").doc("autoSync").set(
+        { lastRunAt: Date.now(), lastResult: "error", message: e.message || "error" }, { merge: true });
+    }
   }
-  try { return await syncScores(FD_API_KEY.value(), "manual"); }
-  catch (e) { throw new HttpsError("internal", e.message || "Sync failed"); }
-});
+);
 
 /* ---- reliable 15-minute schedule (replaces the GitHub cron) ---- */
 exports.runScoresScheduled = onSchedule(
