@@ -1559,24 +1559,24 @@
       asCard = h(`<div class="card"><div class="section-title" style="margin-top:0">🤖 Auto-scores</div>
         <p class="muted" style="font-size:13px;margin:0 0 4px">No runs recorded yet. It checks every ~15 min and fills in finished group-stage results (your manual entry still works as a backup).</p></div>`);
     } else {
+      const errored = as.lastResult === "error";
       const stale = (Date.now() - (as.lastRunAt || 0)) > 60 * 60 * 1000;
       const scored = as.scored || [];
       const scoredLine = scored.length ? "Last scored: " + scored.join(", ") : "No new games needed scoring on the last run.";
       asCard = h(`<div class="card"><div class="section-title" style="margin-top:0">🤖 Auto-scores</div>
-        <div style="font-weight:600">${stale ? "🔴" : "🟢"} Last ran ${timeAgo(as.lastRunAt)} ago</div>
+        <div style="font-weight:600">${(errored || stale) ? "🔴" : "🟢"} Last ran ${timeAgo(as.lastRunAt)} ago</div>
         <div class="muted" style="font-size:13px;margin-top:4px">${esc(scoredLine)}</div>
-        ${stale ? `<div style="color:var(--bad);font-size:13px;margin-top:6px;font-weight:600">No successful run in over an hour — check it's still running.</div>` : ""}</div>`);
+        ${errored ? `<div style="color:var(--bad);font-size:13px;margin-top:6px;font-weight:600">Last run had a problem: ${esc(as.message || "unknown")}</div>`
+          : stale ? `<div style="color:var(--bad);font-size:13px;margin-top:6px;font-weight:600">No successful run in over an hour — check it's still running.</div>` : ""}</div>`);
     }
-    // Run-now button (calls the Cloud Function)
+    // Run-now button — writes a request the Cloud Function picks up; the card updates shortly after
     const runBtn = h(`<button class="btn secondary sm" style="margin-top:10px;width:100%">▶ Run scores now</button>`);
     runBtn.onclick = () => {
-      runBtn.disabled = true; const lbl = runBtn.textContent; runBtn.textContent = "Running…";
+      runBtn.disabled = true; const lbl = runBtn.textContent; runBtn.textContent = "Requesting…";
       Promise.resolve(S.runScoresNow ? S.runScoresNow() : { error: "Not available" }).then(res => {
         runBtn.disabled = false; runBtn.textContent = lbl;
         if (res && res.error) return toast(res.error);
-        const n = (res && res.newlyScored) || 0;
-        toast(n ? `Scored ${n} new game${n > 1 ? "s" : ""} ✓` : "Up to date — nothing new to score");
-        subAdmin();
+        toast("Scoring requested — the status above updates in a few seconds ⏳");
       });
     };
     asCard.appendChild(runBtn);

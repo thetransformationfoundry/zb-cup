@@ -586,14 +586,14 @@
     /* --- announcement (admin pinned post) --- */
     announcement() { return cache.announcement; },
     autoSyncStatus() { return cache.autoSync; },
-    // Admin: trigger the auto-scorer Cloud Function on demand. Returns the run summary.
+    // Admin: ask the auto-scorer to run now. Writes a request doc that a Firestore-triggered
+    // Cloud Function picks up (avoids the org block on publicly-callable functions). The
+    // Admin status card updates via the autoSync listener a few seconds later.
     runScoresNow() {
-      try {
-        if (!firebase.functions) return Promise.resolve({ error: "Please refresh the app to enable this." });
-        return firebase.functions().httpsCallable("runScoresNow")()
-          .then(r => r.data)
-          .catch(e => ({ error: (e && e.message) || "Couldn't run the scorer." }));
-      } catch (e) { return Promise.resolve({ error: "Couldn't run the scorer." }); }
+      const u = me();
+      return db.doc("tournament/syncRequest").set({ requestedAt: now(), by: (u && u.id) || null })
+        .then(() => ({ requested: true }))
+        .catch(e => ({ error: (e && e.message) || "Couldn't request a run." }));
     },
     toggleAnnouncementGoal() {
       const u = me(); if (!u || !cache.announcement) return;
