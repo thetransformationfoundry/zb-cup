@@ -289,6 +289,21 @@
     /* --- users / leaderboard --- */
     allUsers() { return Object.values(cache.users); },
     leaderboard() { return this.allUsers().slice().sort((a, b) => (b.points || 0) - (a.points || 0)); },
+    // ranking by match-prediction points only (winner/exact-score), not facts/photos/country
+    footballLeaderboard() { return this.allUsers().slice().sort((a, b) => (b.footballPoints || 0) - (a.footballPoints || 0)); },
+    // ADMIN: recompute everyone's footballPoints from their predictions (backfill + drift fix)
+    recalcFootballPoints() {
+      return db.collection("predictions").get().then(snap => {
+        const sum = {};
+        snap.forEach(d => { const p = d.data(); if (p && p.uid && p.pointsAwarded) sum[p.uid] = (sum[p.uid] || 0) + p.pointsAwarded; });
+        const batch = db.batch();
+        Object.values(cache.users).forEach(u => {
+          const fp = sum[u.id] || 0; u.footballPoints = fp;            // optimistic
+          batch.update(db.collection("users").doc(u.id), { footballPoints: fp });
+        });
+        return batch.commit();
+      }).then(() => { refresh(); return { ok: true }; }).catch(e => ({ error: (e && e.message) || "Recalc failed" }));
+    },
 
     /* --- fun facts (stored as array on the user doc) --- */
     factsFor(userId) { const u = cache.users[userId]; return (u && u.facts) || []; },
@@ -388,7 +403,7 @@
           if (p.winner === realWinner) pts += 5;
           if (p.scoreA === scoreA && p.scoreB === scoreB) pts += 5;
           batch.update(d.ref, { pointsAwarded: pts });
-          if (pts > 0) batch.update(db.collection("users").doc(p.uid), { points: FV.increment(pts) });
+          if (pts > 0) batch.update(db.collection("users").doc(p.uid), { points: FV.increment(pts), footballPoints: FV.increment(pts) });
         });
         batch.commit();
       });

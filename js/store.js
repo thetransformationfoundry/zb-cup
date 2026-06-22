@@ -162,6 +162,13 @@
     /* --- users / leaderboard --- */
     allUsers() { return Object.values(get().users); },
     leaderboard() { return this.allUsers().slice().sort((a, b) => b.points - a.points); },
+    footballLeaderboard() { return this.allUsers().slice().sort((a, b) => (b.footballPoints || 0) - (a.footballPoints || 0)); },
+    recalcFootballPoints() {
+      const s = get(); const sum = {};
+      Object.values(s.predictions || {}).forEach(byUser => Object.entries(byUser).forEach(([uid2, p]) => { if (p && p.pointsAwarded) sum[uid2] = (sum[uid2] || 0) + p.pointsAwarded; }));
+      Object.values(s.users).forEach(u => { u.footballPoints = sum[u.id] || 0; });
+      save(); return Promise.resolve({ ok: true });
+    },
 
     /* --- fun facts --- */
     factsFor(userId) { return get().facts[userId] || []; },
@@ -256,7 +263,7 @@
         if (p.winner === realWinner) pts += 5;
         if (p.scoreA === scoreA && p.scoreB === scoreB) pts += 5;
         p.pointsAwarded = pts;
-        if (s.users[userId]) s.users[userId].points += pts;
+        if (s.users[userId]) { s.users[userId].points += pts; s.users[userId].footballPoints = (s.users[userId].footballPoints || 0) + pts; }
       });
       save();
     },

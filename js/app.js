@@ -221,6 +221,7 @@
   let pendingChatPhoto = null;     // photo attached to the chat composer, before posting
   let subScreen = null;            // active "More" sub-screen (so live refreshes don't bounce us back)
   let annExpanded = false;         // is the pinned announcement expanded?
+  let boardMode = "total";         // leaderboard view: "total" or "football"
   let onb = null; // onboarding working state
 
   /* =====================================================
@@ -1033,16 +1034,30 @@
   /* ---------------- LEADERBOARD ---------------- */
   function viewLeaderboard() {
     const me = S.currentUser();
-    const board = S.leaderboard();
-    const wrap = h(`<div class="screen"><h2>Leaderboard</h2><p class="sub">Live ranking. Earn points from matches, fun facts, and your country. ${I.crown} = times colleagues have guessed your facts.</p></div>`);
+    const football = boardMode === "football";
+    const board = football ? (S.footballLeaderboard ? S.footballLeaderboard() : S.leaderboard()) : S.leaderboard();
+    const sub = football
+      ? "Ranked by ⚽ match-prediction points only (winner +5, exact score +5)."
+      : `Live ranking. Total points from matches, fun facts, and your country. ${I.crown} = times colleagues have guessed your facts.`;
+    const wrap = h(`<div class="screen"><h2>Leaderboard</h2><p class="sub">${sub}</p></div>`);
+
+    // Total / Football toggle
+    const chips = h(`<div class="row" style="gap:8px;margin-bottom:14px">
+      <button class="chip ${football ? "grey" : ""}" data-m="total" style="cursor:pointer">Total points</button>
+      <button class="chip ${football ? "" : "grey"}" data-m="football" style="cursor:pointer">⚽ Football</button>
+    </div>`);
+    chips.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { boardMode = b.dataset.m; viewLeaderboard(); });
+    wrap.appendChild(chips);
+
     const card = h(`<div class="card"></div>`);
     board.forEach((u, i) => {
+      const val = football ? (u.footballPoints || 0) : (u.points || 0);
       const row = h(`<div class="lb-row ${i === 0 ? "top1" : ""} ${u.id === me.id ? "me" : ""}">
         <span class="lb-rank">${i + 1}</span>
         ${avatar(u, "sm")}
         ${u.country ? `<img class="flag" src="${window.ZB_FLAG(u.country.code)}" alt="${esc(u.country.name)}" title="${esc(u.country.name)}" loading="lazy" style="width:24px;height:17px">` : ""}
-        <span class="lb-name">${esc(u.name)}${u.id === me.id ? " (you)" : ""} ${crownBadge(u.crowns)}</span>
-        <span class="chip points">${u.points}</span>
+        <span class="lb-name">${esc(u.name)}${u.id === me.id ? " (you)" : ""} ${football ? "" : crownBadge(u.crowns)}</span>
+        <span class="chip points">${val}</span>
       </div>`);
       card.appendChild(row);
     });
@@ -1677,6 +1692,19 @@
       bg.querySelector("#ok").onclick = () => { S.setTournamentWinner(c); bg.remove(); toast("2,500 pts awarded ✓"); renderApp(); };
     };
     wrap.appendChild(secE);
+
+    /* F — Maintenance: recalc football points (backfill the football leaderboard) */
+    const secF = h(`<div class="card"><div class="section-title" style="margin-top:0">Maintenance</div>
+      <p class="muted" style="font-size:13px;margin:0 0 8px">Recalculate everyone's ⚽ football points from their predictions (powers the Football leaderboard). Run once to backfill, or any time the numbers look off. Doesn't change total points.</p>
+      <button class="btn ghost" id="recalc-fp">Recalculate football points</button></div>`);
+    secF.querySelector("#recalc-fp").onclick = () => {
+      const b = secF.querySelector("#recalc-fp"); b.disabled = true; b.textContent = "Recalculating…";
+      Promise.resolve(S.recalcFootballPoints ? S.recalcFootballPoints() : { error: "Not available" }).then(r => {
+        b.disabled = false; b.textContent = "Recalculate football points";
+        toast(r && r.error ? r.error : "Football points recalculated ✓");
+      });
+    };
+    wrap.appendChild(secF);
 
     setView(wrap);
   }
