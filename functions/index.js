@@ -84,7 +84,7 @@ async function syncScores(apiKey, trigger) {
       if (p.winner === realWinner) pts += 5;
       if (p.scoreA === scoreA && p.scoreB === scoreB) pts += 5;
       batch.update(d.ref, { pointsAwarded: pts });
-      if (pts > 0) batch.update(db.collection("users").doc(p.uid), { points: FieldValue.increment(pts) });
+      if (pts > 0) batch.update(db.collection("users").doc(p.uid), { points: FieldValue.increment(pts), footballPoints: FieldValue.increment(pts) });
     });
     await batch.commit();
     wrote++;
