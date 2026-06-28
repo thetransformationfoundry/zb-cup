@@ -844,6 +844,7 @@
         <div class="stepper" data-s="B"><button class="dec">–</button><span class="val">${sB}</span><button class="inc">+</button></div>
       </div>
       ${isKnockout ? `
+      <div class="muted" style="font-size:11px;text-align:center;margin-top:6px">Goals in the match (after extra time) — not the penalty shootout</div>
       <div class="muted" style="font-size:12px;font-weight:600;margin:14px 0 6px">How does it end? <span style="color:var(--zb-blue)">+5 bonus</span></div>
       <div class="seg fin">
         <button data-f="normal">Normal time</button>
