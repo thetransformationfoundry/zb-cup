@@ -2,10 +2,11 @@
    ZB Cup — auto-scores Cloud Function
    ------------------------------------------------------------
    Two entry points, both run the same core sync:
-     • runScoresNow      — callable from the app's Admin "Run scores now" button (admins only)
+     • onSyncRequested    — Firestore trigger fired by the Admin "Run scores now" button
      • runScoresScheduled — runs every 15 minutes (reliable, Google-managed)
-   Pulls finished GROUP-STAGE results from football-data.org and writes the result +
-   awards points, idempotently (skips games already scored; never double-awards).
+   It (1) fills in KNOCKOUT teams from football-data as the bracket resolves, and
+   (2) scores finished games (group + knockout, incl. extra time / penalties via the
+   API's winner field), idempotently (skips games already scored; never double-awards).
    Auth to Firestore is automatic (runs as the project service account — no key).
    The football-data key is a Firebase secret (FD_API_KEY).
    ============================================================ */
@@ -25,7 +26,7 @@ const ADMIN_EMAILS = [
 ];
 
 const TEAMS = require("./teams.json");        // [{code,name}]
-const FIXTURES = require("./fixtures.json");  // [{id,a,b}] group-stage fixtures with team codes
+const FIXTURES = require("./fixtures.json");  // [{id,a,b,kickoff,round}] — knockouts have a/b = null
 
 /* ---- team-name matching (same logic as tools/sync-scores.js) ---- */
 const normalize = s => (s || "").toString()
@@ -46,57 +47,108 @@ const BY_NAME = {}; TEAMS.forEach(t => { BY_NAME[normalize(t.name)] = t.code; })
 const NAME_BY_CODE = {}; TEAMS.forEach(t => { NAME_BY_CODE[t.code] = t.name; });
 const resolveCode = name => { const n = normalize(name); return ALIASES[n] || BY_NAME[n] || null; };
 const resolveTeam = t => t ? (resolveCode(t.name) || resolveCode(t.shortName) || resolveCode(t.tla)) : null;
-const byPair = {}; FIXTURES.forEach(f => { byPair[[f.a, f.b].sort().join("|")] = f; });
+const teamObj = code => ({ code, name: NAME_BY_CODE[code] || code });
 
-/* ---- core sync (returns a summary) ---- */
+// group fixtures: keyed by the unordered pair of team codes (teams known from the start)
+const byPair = {}; FIXTURES.filter(f => f.a && f.b).forEach(f => { byPair[[f.a, f.b].sort().join("|")] = f; });
+// knockout fixtures: teams unknown initially → matched by round + nearest kickoff
+const KNOCKOUTS = FIXTURES.filter(f => !f.a || !f.b);
+const ROUND_BY_STAGE = {
+  LAST_32: "Round of 32", ROUND_OF_32: "Round of 32",
+  LAST_16: "Round of 16", ROUND_OF_16: "Round of 16",
+  QUARTER_FINALS: "Quarter-final", QUARTER_FINAL: "Quarter-final",
+  SEMI_FINALS: "Semi-final", SEMI_FINAL: "Semi-final",
+  THIRD_PLACE: "Third place", THIRD_PLACE_FINAL: "Third place", "3RD_PLACE": "Third place",
+  FINAL: "Final"
+};
+// find our knockout fixture for a football-data knockout match: same round (if known) + nearest kickoff
+function matchKnockout(m, used) {
+  const round = ROUND_BY_STAGE[m.stage];
+  const t = new Date(m.utcDate).getTime();
+  let best = null, bestDiff = Infinity;
+  for (const f of KNOCKOUTS) {
+    if (used.has(f.id)) continue;
+    if (round && f.round !== round) continue;
+    const diff = Math.abs(new Date(f.kickoff).getTime() - t);
+    if (diff < bestDiff) { bestDiff = diff; best = f; }
+  }
+  return (best && bestDiff <= 12 * 3600 * 1000) ? best : null;  // within ~half a day
+}
+
+/* ---- core sync: set knockout teams as the bracket resolves + score finished games ---- */
 async function syncScores(apiKey, trigger) {
   const res = await fetch("https://api.football-data.org/v4/competitions/WC/matches", {
     headers: { "X-Auth-Token": apiKey }
   });
   if (!res.ok) throw new Error("football-data API error " + res.status);
   const matches = (await res.json()).matches || [];
-  const todo = matches.filter(m => m.status === "FINISHED" && m.stage === "GROUP_STAGE"
-    && (!m.score || !m.score.duration || m.score.duration === "REGULAR"));
 
-  let wrote = 0, skipped = 0, unmatched = 0;
+  let teamsSet = 0, wrote = 0, skipped = 0, unmatched = 0;
   const scoredNow = [];
-  for (const m of todo) {
+  const usedKO = new Set();
+
+  for (const m of matches) {
+    const isGroup = m.stage === "GROUP_STAGE";
     const homeCode = resolveTeam(m.homeTeam), awayCode = resolveTeam(m.awayTeam);
-    if (!homeCode || !awayCode) { unmatched++; continue; }
-    const fx = byPair[[homeCode, awayCode].sort().join("|")];
-    if (!fx) { unmatched++; continue; }
-    const ft = m.score.fullTime;
-    let scoreA, scoreB;
-    if (fx.a === homeCode) { scoreA = ft.home; scoreB = ft.away; } else { scoreA = ft.away; scoreB = ft.home; }
+
+    // find OUR fixture: group by code-pair; knockout by round + nearest kickoff
+    let fx = null;
+    if (isGroup) { if (homeCode && awayCode) fx = byPair[[homeCode, awayCode].sort().join("|")]; }
+    else { fx = matchKnockout(m, usedKO); if (fx) usedKO.add(fx.id); }
+    if (!fx) { if (m.status === "FINISHED") unmatched++; continue; }
 
     const metaRef = db.collection("fixturesMeta").doc(fx.id);
     const meta = await metaRef.get();
-    if (meta.exists && meta.data().status === "finished") { skipped++; continue; }
+    const cur = meta.exists ? meta.data() : {};
+    const alreadyFinished = cur.status === "finished";
 
-    await metaRef.set({ status: "finished", result: { scoreA, scoreB } }, { merge: true });
-    const realWinner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
-    const preds = await db.collection("predictions").where("fixtureId", "==", fx.id).get();
-    const batch = db.batch();
-    preds.forEach(d => {
-      const p = d.data();
-      if (p.pointsAwarded != null) return;       // never double-award
-      let pts = 0;
-      if (p.winner === realWinner) pts += 5;
-      if (p.scoreA === scoreA && p.scoreB === scoreB) pts += 5;
-      batch.update(d.ref, { pointsAwarded: pts });
-      if (pts > 0) batch.update(db.collection("users").doc(p.uid), { points: FieldValue.increment(pts), footballPoints: FieldValue.increment(pts) });
-    });
-    await batch.commit();
-    wrote++;
-    scoredNow.push(`${NAME_BY_CODE[fx.a]} ${scoreA}-${scoreB} ${NAME_BY_CODE[fx.b]}`);
+    // KNOCKOUT team-setting: fill in teamA/teamB as soon as the API knows them (teamA = home)
+    if (!isGroup && homeCode && awayCode && !alreadyFinished) {
+      const need = !cur.teamA || !cur.teamB || (cur.teamA.code !== homeCode) || (cur.teamB.code !== awayCode);
+      if (need) { await metaRef.set({ teamA: teamObj(homeCode), teamB: teamObj(awayCode) }, { merge: true }); teamsSet++; }
+    }
+
+    // SCORING: finished games (group + knockout), idempotent
+    if (m.status === "FINISHED" && !alreadyFinished) {
+      const ft = m.score && m.score.fullTime;
+      if (!ft || ft.home == null || ft.away == null) continue;
+      let scoreA, scoreB, realWinner, aCode, bCode;
+      if (isGroup) {
+        if (fx.a === homeCode) { scoreA = ft.home; scoreB = ft.away; aCode = fx.a; bCode = fx.b; }
+        else { scoreA = ft.away; scoreB = ft.home; aCode = fx.a; bCode = fx.b; }
+        realWinner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
+      } else {
+        // knockout: teamA was set = home; use the API's winner field so penalties/ET decide correctly
+        scoreA = ft.home; scoreB = ft.away; aCode = homeCode; bCode = awayCode;
+        const w = m.score && m.score.winner;
+        realWinner = w === "HOME_TEAM" ? "A" : w === "AWAY_TEAM" ? "B" : (scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw");
+      }
+      await metaRef.set({ status: "finished", result: { scoreA, scoreB } }, { merge: true });
+      const preds = await db.collection("predictions").where("fixtureId", "==", fx.id).get();
+      const batch = db.batch();
+      preds.forEach(d => {
+        const p = d.data();
+        if (p.pointsAwarded != null) return;       // never double-award
+        let pts = 0;
+        if (p.winner === realWinner) pts += 5;
+        if (p.scoreA === scoreA && p.scoreB === scoreB) pts += 5;
+        batch.update(d.ref, { pointsAwarded: pts });
+        if (pts > 0) batch.update(db.collection("users").doc(p.uid), { points: FieldValue.increment(pts), footballPoints: FieldValue.increment(pts) });
+      });
+      await batch.commit();
+      wrote++;
+      scoredNow.push(`${NAME_BY_CODE[aCode]} ${scoreA}-${scoreB} ${NAME_BY_CODE[bCode]}`);
+    } else if (m.status === "FINISHED" && alreadyFinished) {
+      skipped++;
+    }
   }
 
   await db.collection("tournament").doc("autoSync").set({
     lastRunAt: Date.now(), lastResult: "ok",
-    newlyScored: wrote, alreadyDone: skipped, unmatched, scored: scoredNow, trigger
+    teamsSet, newlyScored: wrote, alreadyDone: skipped, unmatched, scored: scoredNow, trigger
   }, { merge: true });
 
-  return { newlyScored: wrote, alreadyDone: skipped, unmatched, scored: scoredNow };
+  return { teamsSet, newlyScored: wrote, alreadyDone: skipped, unmatched, scored: scoredNow };
 }
 
 /* ---- the Admin "Run scores now" button writes tournament/syncRequest; this runs the sync.
