@@ -176,7 +176,7 @@
       const g = S.fixturePredictors(f.id);
       if (!g || !f.result) { wrap.innerHTML = winSkeleton(); return; }
       const r = f.result;
-      const realWinner = r.scoreA > r.scoreB ? "A" : r.scoreB > r.scoreA ? "B" : "draw";
+      const realWinner = r.winner || (r.scoreA > r.scoreB ? "A" : r.scoreB > r.scoreA ? "B" : "draw"); // knockouts store the advancing side
       const isPerfect = u => u.scoreA === r.scoreA && u.scoreB === r.scoreB;
       const winners = (g[realWinner] || []).slice().sort((a, b) => (isPerfect(b) ? 1 : 0) - (isPerfect(a) ? 1 : 0));
       if (!winners.length) { wrap.innerHTML = `<div class="sup-title muted">Who called it 🏆</div><div class="sup-empty muted">Nobody predicted this result.</div>`; return; }
@@ -776,31 +776,38 @@
 
     if (finished) {
       if (pred) {
-        const realWinner = f.result.scoreA > f.result.scoreB ? "A" : f.result.scoreB > f.result.scoreA ? "B" : "draw";
+        const r = f.result;
+        const isKnockout = !f.group;
+        const FIN_LABEL = { normal: "90 min", extratime: "extra time", penalties: "penalties" };
+        const realWinner = r.winner || (r.scoreA > r.scoreB ? "A" : r.scoreB > r.scoreA ? "B" : "draw");
         const winOk = pred.winner === realWinner;
-        const scoreOk = pred.scoreA === f.result.scoreA && pred.scoreB === f.result.scoreB;
-        const pts = (winOk ? 5 : 0) + (scoreOk ? 5 : 0);
-        const headline = pts === 10 ? "Perfect! You nailed the winner and the exact score."
-          : pts === 5 ? "Called the winner."
+        const scoreOk = pred.scoreA === r.scoreA && pred.scoreB === r.scoreB;
+        const finishShown = isKnockout && r.finish;                 // we know how it ended
+        const finishOk = finishShown && pred.finish && pred.finish === r.finish;
+        const maxPts = finishShown ? 15 : 10;
+        const pts = (winOk ? 5 : 0) + (scoreOk ? 5 : 0) + (finishOk ? 5 : 0);
+        const headline = pts >= maxPts ? "Perfect — you nailed it!"
+          : winOk ? (isKnockout ? "Called who went through." : "Called the winner.")
           : "Missed this one.";
         const stateIco = pts ? `<span class="result-ico gold">${I.crown}</span>` : `<span class="result-dot"></span>`;
         const tick = ok => ok ? `<span class="r-yes">${I.check}</span>` : `<span class="r-no"></span>`;
         area.appendChild(h(`<div>
           <div class="divider"></div>
-          <div class="result-summary ${pts ? (pts === 10 ? "perfect" : "good") : "miss"}">
+          <div class="result-summary ${pts ? (pts >= maxPts ? "perfect" : "good") : "miss"}">
             <div class="row between" style="align-items:flex-start">
               <div class="row" style="gap:9px;align-items:flex-start">
                 ${stateIco}
                 <div>
                   <div style="font-weight:700;font-size:14px">${esc(headline)}</div>
-                  <div class="muted" style="font-size:13px;margin-top:4px">Result <b style="color:var(--ink)">${f.result.scoreA}–${f.result.scoreB}</b> · your pick <b style="color:var(--ink)">${pred.scoreA}–${pred.scoreB}</b></div>
-                  <div class="row" style="gap:14px;margin-top:7px;font-size:12px">
-                    <span class="row" style="gap:5px">${tick(winOk)}<span class="muted">Winner (5)</span></span>
+                  <div class="muted" style="font-size:13px;margin-top:4px">Result <b style="color:var(--ink)">${r.scoreA}–${r.scoreB}</b>${finishShown ? ` <span style="font-size:12px">(${FIN_LABEL[r.finish] || r.finish})</span>` : ""} · your pick <b style="color:var(--ink)">${pred.scoreA}–${pred.scoreB}</b></div>
+                  <div class="row" style="gap:14px;margin-top:7px;font-size:12px;flex-wrap:wrap">
+                    <span class="row" style="gap:5px">${tick(winOk)}<span class="muted">${isKnockout ? "Through" : "Winner"} (5)</span></span>
                     <span class="row" style="gap:5px">${tick(scoreOk)}<span class="muted">Exact (5)</span></span>
+                    ${finishShown ? `<span class="row" style="gap:5px">${tick(finishOk)}<span class="muted">Finish (5)</span></span>` : ""}
                   </div>
                 </div>
               </div>
-              <span class="chip ${pts ? (pts === 10 ? "gold" : "good") : "grey"}" style="flex:0 0 auto">${pts ? "+" + pts + " pts" : "0 pts"}</span>
+              <span class="chip ${pts ? (pts >= maxPts ? "gold" : "good") : "grey"}" style="flex:0 0 auto">${pts ? "+" + pts + " pts" : "0 pts"}</span>
             </div>
           </div>
         </div>`));
@@ -819,13 +826,16 @@
     }
 
     // upcoming: editable prediction
+    const isKnockout = !f.group;   // knockouts have group === "" — no draw; +finish bonus
     let winner = pred ? pred.winner : null;
+    let finish = pred ? (pred.finish || null) : null;
     let sA = pred ? pred.scoreA : 0, sB = pred ? pred.scoreB : 0;
     const ui = h(`<div>
       <div class="divider"></div>
+      ${isKnockout ? `<div class="muted" style="font-size:12px;font-weight:600;margin-bottom:6px">Who goes through?</div>` : ""}
       <div class="seg">
         <button data-w="A">${esc(f.teamA.name)}</button>
-        <button data-w="draw">Draw</button>
+        ${isKnockout ? "" : `<button data-w="draw">Draw</button>`}
         <button data-w="B">${esc(f.teamB.name)}</button>
       </div>
       <div class="score-row">
@@ -833,19 +843,28 @@
         <span class="muted">score</span>
         <div class="stepper" data-s="B"><button class="dec">–</button><span class="val">${sB}</span><button class="inc">+</button></div>
       </div>
+      ${isKnockout ? `
+      <div class="muted" style="font-size:12px;font-weight:600;margin:14px 0 6px">How does it end? <span style="color:var(--zb-blue)">+5 bonus</span></div>
+      <div class="seg fin">
+        <button data-f="normal">Normal time</button>
+        <button data-f="extratime">Extra time</button>
+        <button data-f="penalties">Penalties</button>
+      </div>` : ""}
       <button class="btn sm" style="width:100%;margin-top:14px">${pred ? "Update prediction" : "Save prediction"}</button>
     </div>`);
-    const refreshSeg = () => ui.querySelectorAll(".seg button").forEach(b => b.classList.toggle("active", b.dataset.w === winner));
-    refreshSeg();
-    ui.querySelectorAll(".seg button").forEach(b => b.onclick = () => { winner = b.dataset.w; refreshSeg(); });
+    const refreshSeg = () => ui.querySelectorAll(".seg:not(.fin) button").forEach(b => b.classList.toggle("active", b.dataset.w === winner));
+    const refreshFin = () => ui.querySelectorAll(".seg.fin button").forEach(b => b.classList.toggle("active", b.dataset.f === finish));
+    refreshSeg(); refreshFin();
+    ui.querySelectorAll(".seg:not(.fin) button").forEach(b => b.onclick = () => { winner = b.dataset.w; refreshSeg(); });
+    ui.querySelectorAll(".seg.fin button").forEach(b => b.onclick = () => { finish = b.dataset.f; refreshFin(); });
     ui.querySelectorAll(".stepper").forEach(st => {
       const valEl = st.querySelector(".val"); const side = st.dataset.s;
       st.querySelector(".inc").onclick = () => { if (side === "A") sA = Math.min(20, sA + 1); else sB = Math.min(20, sB + 1); valEl.textContent = side === "A" ? sA : sB; };
       st.querySelector(".dec").onclick = () => { if (side === "A") sA = Math.max(0, sA - 1); else sB = Math.max(0, sB - 1); valEl.textContent = side === "A" ? sA : sB; };
     });
     ui.querySelector(".btn").onclick = () => {
-      if (!winner) return toast("Pick a winner first");
-      S.savePrediction(f.id, { winner, scoreA: sA, scoreB: sB });
+      if (!winner) return toast(isKnockout ? "Pick who goes through" : "Pick a winner first");
+      S.savePrediction(f.id, { winner, scoreA: sA, scoreB: sB, finish: isKnockout ? finish : null });
       toast("Prediction saved ✓"); (onSaved || viewMatches)();
     };
     area.appendChild(ui);
@@ -1369,6 +1388,8 @@
       <p>Pick one nation. <b>It locks immediately</b> and can't be changed. If they win the whole World Cup, you score a huge <b>2,500 points</b>!</p>
       <div class="section-title">Match predictions (up to 10 pts/game)</div>
       <p>For each game predict the <b>winner</b> (+5) and the <b>exact score</b> (+5). Predictions <b>lock at kickoff</b> — get them in early!</p>
+      <div class="section-title">Knockouts (up to 15 pts/game) 🏆</div>
+      <p>From the Round of 32 there are no draws — pick <b>who goes through</b> (+5), the <b>exact score</b> (+5), and <b>how it ends</b> — normal time, extra time or penalties (+5 bonus). Calling a shootout right is the big flex!</p>
       <div class="section-title">Fun facts (20 pts each)</div>
       <p>Set 3 multiple-choice facts about yourself (they <b>lock</b> once saved). Guess colleagues' facts for <b>20 points</b> each. Each time someone guesses one of <b>your</b> facts, you earn a 👑. You get <b>3 wrong guesses per day</b> — keep going while you're right; 3 wrong and you're done until tomorrow.</p>
       <div class="section-title">📸 Celebration photos (+10 pts)</div>

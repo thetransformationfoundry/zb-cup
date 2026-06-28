@@ -228,13 +228,13 @@
       const me = this.currentUser(); if (!me) return null;
       return (get().predictions[fixtureId] || {})[me.id] || null;
     },
-    savePrediction(fixtureId, { winner, scoreA, scoreB }) {
+    savePrediction(fixtureId, { winner, scoreA, scoreB, finish }) {
       const me = this.currentUser(); const s = get();
       const fx = s.fixtures.find(f => f.id === fixtureId);
       if (!fx || fx.status === "finished") return { error: "Locked" };
       if (new Date(fx.kickoff).getTime() <= now()) return { error: "Predictions closed at kickoff" };
       s.predictions[fixtureId] = s.predictions[fixtureId] || {};
-      s.predictions[fixtureId][me.id] = { winner, scoreA, scoreB, pointsAwarded: null };
+      s.predictions[fixtureId][me.id] = { winner, scoreA, scoreB, finish: finish || null, pointsAwarded: null };
       save();
       return { ok: true };
     },

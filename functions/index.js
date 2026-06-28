@@ -123,7 +123,14 @@ async function syncScores(apiKey, trigger) {
         const w = m.score && m.score.winner;
         realWinner = w === "HOME_TEAM" ? "A" : w === "AWAY_TEAM" ? "B" : (scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw");
       }
-      await metaRef.set({ status: "finished", result: { scoreA, scoreB } }, { merge: true });
+      // how a knockout was decided (for the +5 "finish" bonus)
+      let actualFinish = null;
+      if (!isGroup) {
+        const dur = m.score && m.score.duration;
+        actualFinish = dur === "PENALTY_SHOOTOUT" ? "penalties" : dur === "EXTRA_TIME" ? "extratime" : "normal";
+      }
+      const resultDoc = isGroup ? { scoreA, scoreB } : { scoreA, scoreB, winner: realWinner, finish: actualFinish };
+      await metaRef.set({ status: "finished", result: resultDoc }, { merge: true });
       const preds = await db.collection("predictions").where("fixtureId", "==", fx.id).get();
       const batch = db.batch();
       preds.forEach(d => {
@@ -132,6 +139,7 @@ async function syncScores(apiKey, trigger) {
         let pts = 0;
         if (p.winner === realWinner) pts += 5;
         if (p.scoreA === scoreA && p.scoreB === scoreB) pts += 5;
+        if (!isGroup && actualFinish && p.finish === actualFinish) pts += 5;   // knockout "how it ends" bonus
         batch.update(d.ref, { pointsAwarded: pts });
         if (pts > 0) batch.update(db.collection("users").doc(p.uid), { points: FieldValue.increment(pts), footballPoints: FieldValue.increment(pts) });
       });

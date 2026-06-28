@@ -357,12 +357,12 @@
     /* --- fixtures / predictions --- */
     fixtures() { return mergedFixtures(); },
     myPrediction(fixtureId) { return cache.predictionsMine[fixtureId] || null; },
-    savePrediction(fixtureId, { winner, scoreA, scoreB }) {
+    savePrediction(fixtureId, { winner, scoreA, scoreB, finish }) {
       const u = me(); const fx = mergedFixtures().find(f => f.id === fixtureId);
       if (!fx || fx.status === "finished") return { error: "Locked" };
       if (new Date(fx.kickoff).getTime() <= Date.now()) return { error: "Predictions closed at kickoff" };
       const docId = fixtureId + "_" + u.id;
-      const p = { fixtureId, uid: u.id, winner, scoreA, scoreB, pointsAwarded: null, createdAt: now() };
+      const p = { fixtureId, uid: u.id, winner, scoreA, scoreB, finish: finish || null, pointsAwarded: null, createdAt: now() };
       cache.predictionsMine[fixtureId] = p;                    // optimistic
       delete cache.predictorsByFixture[fixtureId];             // invalidate the "who picked what" cache
       db.collection("predictions").doc(docId).set(p);
