@@ -67,9 +67,33 @@ const ALIASES = {
 // base map from our own team names
 const BY_NAME = {};
 TEAMS.forEach(t => { BY_NAME[normalize(t.name)] = t.code; });
+const NAME_BY_CODE = {}; TEAMS.forEach(t => { NAME_BY_CODE[t.code] = t.name; });
 const resolveCode = name => { const n = normalize(name); return ALIASES[n] || BY_NAME[n] || null; };
 // resolve a football-data team object, trying full name → short name → abbreviation
 const resolveTeam = t => t ? (resolveCode(t.name) || resolveCode(t.shortName) || resolveCode(t.tla)) : null;
+
+// knockout fixtures (teams not yet known) — matched to API matches by round + nearest kickoff
+const KNOCKOUTS = FIXTURES.filter(f => f.teamA.tbd || f.teamB.tbd || !f.teamA.code || !f.teamB.code);
+const ROUND_BY_STAGE = {
+  LAST_32: "Round of 32", ROUND_OF_32: "Round of 32",
+  LAST_16: "Round of 16", ROUND_OF_16: "Round of 16",
+  QUARTER_FINALS: "Quarter-final", QUARTER_FINAL: "Quarter-final",
+  SEMI_FINALS: "Semi-final", SEMI_FINAL: "Semi-final",
+  THIRD_PLACE: "Third place", THIRD_PLACE_FINAL: "Third place", "3RD_PLACE": "Third place",
+  FINAL: "Final"
+};
+function matchKnockout(m, used) {
+  const round = ROUND_BY_STAGE[m.stage];
+  const t = new Date(m.utcDate).getTime();
+  let best = null, bestDiff = Infinity;
+  for (const f of KNOCKOUTS) {
+    if (used.has(f.id)) continue;
+    if (round && f.round !== round) continue;
+    const diff = Math.abs(new Date(f.kickoff).getTime() - t);
+    if (diff < bestDiff) { bestDiff = diff; best = f; }
+  }
+  return (best && bestDiff <= 12 * 3600 * 1000) ? best : null;
+}
 
 // index our fixtures by the (unordered) pair of team codes — two teams meet at most once
 const byPair = {};
@@ -254,11 +278,37 @@ async function runWrite() {
   console.log(`\nDone. ${wrote} newly scored, ${skipped} already done, ${unmatched} unmatched.\n`);
 }
 
+/* ---- mode: --knockouts — DRY RUN: show how API knockout matches map to our fixtures ---- */
+const DEMO_KO = [
+  { stage: "LAST_32", status: "TIMED", utcDate: "2026-06-28T19:00:00Z", homeTeam: { name: "Mexico" }, awayTeam: { name: "Norway" } },
+  { stage: "LAST_32", status: "TIMED", utcDate: "2026-06-29T20:30:00Z", homeTeam: { name: "Germany" }, awayTeam: { name: "Senegal" } },
+  { stage: "LAST_32", status: "TIMED", utcDate: "2026-07-01T00:00:00Z", homeTeam: { name: "Netherlands" }, awayTeam: { name: "Morocco" } }
+];
+async function runKnockouts() {
+  const matches = (argv.includes("--demo") ? DEMO_KO : ((await api("/competitions/WC/matches")).matches || []))
+    .filter(m => m.stage && m.stage !== "GROUP_STAGE")
+    .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
+  console.log(`\nDRY RUN — proposed knockout team mapping (nothing is written). ${matches.length} knockout match(es).\n`);
+  const used = new Set(), unmatched = [];
+  for (const m of matches) {
+    const hc = resolveTeam(m.homeTeam), ac = resolveTeam(m.awayTeam);
+    if (!hc || !ac) { unmatched.push({ reason: "teams not decided yet", home: m.homeTeam && m.homeTeam.name, away: m.awayTeam && m.awayTeam.name, stage: m.stage }); continue; }
+    const fx = matchKnockout(m, used);
+    if (!fx) { unmatched.push({ reason: "no fixture slot within 12h", home: hc, away: ac, stage: m.stage, date: m.utcDate }); continue; }
+    used.add(fx.id);
+    const result = (m.status === "FINISHED" && m.score && m.score.fullTime) ? `   [result ${m.score.fullTime.home}-${m.score.fullTime.away}]` : "";
+    console.log(`  ${fx.id.padEnd(4)} ${fx.round.padEnd(13)} ${new Date(fx.kickoff).toISOString().slice(0, 10)}  →  ${NAME_BY_CODE[hc]} vs ${NAME_BY_CODE[ac]}${result}`);
+  }
+  if (unmatched.length) { console.log(`\nNot mapped yet (teams TBD, or no slot):`); unmatched.forEach(u => console.log("   ", JSON.stringify(u))); }
+  console.log("");
+}
+
 /* ---- entry ---- */
 const argv = process.argv.slice(2);
 (async () => {
   if (argv.includes("--teams")) return runTeams();
   if (argv.includes("--inspect")) return runInspect();
+  if (argv.includes("--knockouts")) return runKnockouts();
   if (argv.includes("--write")) return runWrite();
   return runDryRun(argv.includes("--demo"));
 })();
