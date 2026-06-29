@@ -108,17 +108,20 @@ async function syncScores(apiKey, trigger) {
       if (need) { await metaRef.set({ teamA: teamObj(homeCode), teamB: teamObj(awayCode) }, { merge: true }); teamsSet++; }
     }
 
-    // SCORING: finished games (group + knockout), idempotent
-    if (m.status === "FINISHED" && !alreadyFinished) {
+    // SCORING
+    if (m.status === "FINISHED") {
       const ft = m.score && m.score.fullTime;
       if (!ft || ft.home == null || ft.away == null) continue;
+
+      // Group games: score once, then leave alone.
+      if (isGroup && alreadyFinished) { skipped++; continue; }
+
       let scoreA, scoreB, realWinner, aCode, bCode;
       if (isGroup) {
-        if (fx.a === homeCode) { scoreA = ft.home; scoreB = ft.away; aCode = fx.a; bCode = fx.b; }
-        else { scoreA = ft.away; scoreB = ft.home; aCode = fx.a; bCode = fx.b; }
+        if (fx.a === homeCode) { scoreA = ft.home; scoreB = ft.away; } else { scoreA = ft.away; scoreB = ft.home; }
+        aCode = fx.a; bCode = fx.b;
         realWinner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
       } else {
-        // knockout: teamA was set = home; use the API's winner field so penalties/ET decide correctly
         scoreA = ft.home; scoreB = ft.away; aCode = homeCode; bCode = awayCode;
         const w = m.score && m.score.winner;
         realWinner = w === "HOME_TEAM" ? "A" : w === "AWAY_TEAM" ? "B" : (scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw");
@@ -131,23 +134,37 @@ async function syncScores(apiKey, trigger) {
       }
       const resultDoc = isGroup ? { scoreA, scoreB } : { scoreA, scoreB, winner: realWinner, finish: actualFinish };
       await metaRef.set({ status: "finished", result: resultDoc }, { merge: true });
+
       const preds = await db.collection("predictions").where("fixtureId", "==", fx.id).get();
       const batch = db.batch();
+      let touched = 0;
       preds.forEach(d => {
         const p = d.data();
-        if (p.pointsAwarded != null) return;       // never double-award
-        let pts = 0;
-        if (p.winner === realWinner) pts += 5;
-        if (p.scoreA === scoreA && p.scoreB === scoreB) pts += 5;
-        if (!isGroup && actualFinish && p.finish === actualFinish) pts += 5;   // knockout "how it ends" bonus
-        batch.update(d.ref, { pointsAwarded: pts });
-        if (pts > 0) batch.update(db.collection("users").doc(p.uid), { points: FieldValue.increment(pts), footballPoints: FieldValue.increment(pts) });
+        // correct points for this prediction
+        let correct = 0;
+        if (p.winner === realWinner) correct += 5;
+        if (p.scoreA === scoreA && p.scoreB === scoreB) correct += 5;
+        if (!isGroup && actualFinish && p.finish === actualFinish) correct += 5;   // knockout finish bonus
+
+        if (isGroup) {
+          // group: award once (pointsAwarded was null)
+          batch.update(d.ref, { pointsAwarded: correct });
+          if (correct > 0) batch.update(db.collection("users").doc(p.uid), { points: FieldValue.increment(correct), footballPoints: FieldValue.increment(correct) });
+          touched++;
+        } else {
+          // knockout: RECONCILE — top up (or fix) the difference vs what was awarded before.
+          // Self-heals games scored before the finish bonus existed; idempotent (delta 0 once correct).
+          const old = (p.pointsAwarded == null) ? 0 : p.pointsAwarded;
+          const delta = correct - old;
+          if (p.pointsAwarded == null || delta !== 0) {
+            batch.update(d.ref, { pointsAwarded: correct });
+            if (delta !== 0) batch.update(db.collection("users").doc(p.uid), { points: FieldValue.increment(delta), footballPoints: FieldValue.increment(delta) });
+            touched++;
+          }
+        }
       });
-      await batch.commit();
-      wrote++;
-      scoredNow.push(`${NAME_BY_CODE[aCode]} ${scoreA}-${scoreB} ${NAME_BY_CODE[bCode]}`);
-    } else if (m.status === "FINISHED" && alreadyFinished) {
-      skipped++;
+      if (touched) await batch.commit();
+      if (!alreadyFinished) { wrote++; scoredNow.push(`${NAME_BY_CODE[aCode]} ${scoreA}-${scoreB} ${NAME_BY_CODE[bCode]}`); }
     }
   }
 
