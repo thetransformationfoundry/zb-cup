@@ -139,6 +139,7 @@ async function syncScores(apiKey, trigger) {
       const batch = db.batch();
       let touched = 0, sumDelta = 0;
       const finCounts = {};
+      if (!isGroup) console.log(`[KO-RES] ${fx.id} resultBefore=${JSON.stringify(cur.result || {})} computed={score:${scoreA}-${scoreB},winner:${realWinner},finish:${actualFinish}} apiDuration=${m.score && m.score.duration}`);
       preds.forEach(d => {
         const p = d.data();
         if (!isGroup) finCounts[p.finish || "(none)"] = (finCounts[p.finish || "(none)"] || 0) + 1;
@@ -147,6 +148,7 @@ async function syncScores(apiKey, trigger) {
         if (p.winner === realWinner) correct += 5;
         if (p.scoreA === scoreA && p.scoreB === scoreB) correct += 5;
         if (!isGroup && actualFinish && p.finish === actualFinish) correct += 5;   // knockout finish bonus
+        if (!isGroup) console.log(`[KO-PRED] ${fx.id} ${p.uid} w=${p.winner} fin=${p.finish} ${p.scoreA}-${p.scoreB} pa=${p.pointsAwarded} correct=${correct}`);
 
         if (isGroup) {
           // group: award once (pointsAwarded was null)
