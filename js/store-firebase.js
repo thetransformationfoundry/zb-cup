@@ -376,7 +376,7 @@
       const g = { A: [], draw: [], B: [] };
       Object.keys(m).forEach(id => {
         const p = m[id], usr = cache.users[id];
-        const who = { id, name: (usr && usr.name) || "Someone", photoURL: (usr && usr.photoURL) || null, winner: p.winner, scoreA: p.scoreA, scoreB: p.scoreB };
+        const who = { id, name: (usr && usr.name) || "Someone", photoURL: (usr && usr.photoURL) || null, winner: p.winner, scoreA: p.scoreA, scoreB: p.scoreB, finish: p.finish || null };
         (g[p.winner === "A" ? "A" : p.winner === "B" ? "B" : "draw"]).push(who);
       });
       return g;

@@ -162,11 +162,18 @@
     return `<div class="sup-title muted">Who called it 🏆</div><div class="sup-faces-row" style="justify-content:flex-start"><span class="sup-skel"></span><span class="sup-skel"></span><span class="sup-skel"></span></div>`;
   }
   function showWinnersList(f, winners, isPerfect) {
-    const rows = winners.map(u => `<div class="row" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
+    const isKO = !f.group;
+    const r = f.result || {};
+    // points this person actually earned for the game (they're all winners → +5 through)
+    const ptsFor = u => 5 + (isPerfect(u) ? 5 : 0) + (isKO && r.finish && u.finish === r.finish ? 5 : 0);
+    const rows = winners.map(u => { const p = ptsFor(u); return `<div class="row" style="gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
       ${avatar(u, "sm")}<span style="font-weight:600;flex:1">${esc(u.name)}</span>
-      <span class="chip ${isPerfect(u) ? "gold" : "good"}">${isPerfect(u) ? "+10 " + I.crown : "+5"}</span></div>`).join("");
+      <span class="chip ${p >= 10 ? "gold" : "good"}">+${p}${isPerfect(u) ? " " + I.crown : ""}</span></div>`; }).join("");
+    const note = isKO
+      ? "gold ring = right team through (+5), 👑 = exact score (+5), and +5 for calling how it ended"
+      : "gold ring = right winner (+5), 👑 = perfect score (+10)";
     const bg = modal(`<h3>🏆 Who called it</h3>
-      <p class="muted" style="font-size:13px;margin:0 0 10px">${esc(f.teamA.name)} ${f.result.scoreA}–${f.result.scoreB} ${esc(f.teamB.name)} · gold ring = right winner (+5), 👑 = perfect score (+10)</p>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">${esc(f.teamA.name)} ${f.result.scoreA}–${f.result.scoreB} ${esc(f.teamB.name)} · ${note}</p>
       <div style="max-height:55vh;overflow-y:auto">${rows}</div>
       <button class="btn" id="x" style="margin-top:14px">Close</button>`);
     bg.querySelector("#x").onclick = () => bg.remove();
