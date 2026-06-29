@@ -137,9 +137,11 @@ async function syncScores(apiKey, trigger) {
 
       const preds = await db.collection("predictions").where("fixtureId", "==", fx.id).get();
       const batch = db.batch();
-      let touched = 0;
+      let touched = 0, sumDelta = 0;
+      const finCounts = {};
       preds.forEach(d => {
         const p = d.data();
+        if (!isGroup) finCounts[p.finish || "(none)"] = (finCounts[p.finish || "(none)"] || 0) + 1;
         // correct points for this prediction
         let correct = 0;
         if (p.winner === realWinner) correct += 5;
@@ -158,12 +160,13 @@ async function syncScores(apiKey, trigger) {
           const delta = correct - old;
           if (p.pointsAwarded == null || delta !== 0) {
             batch.update(d.ref, { pointsAwarded: correct });
-            if (delta !== 0) batch.update(db.collection("users").doc(p.uid), { points: FieldValue.increment(delta), footballPoints: FieldValue.increment(delta) });
+            if (delta !== 0) { batch.update(db.collection("users").doc(p.uid), { points: FieldValue.increment(delta), footballPoints: FieldValue.increment(delta) }); sumDelta += delta; }
             touched++;
           }
         }
       });
       if (touched) await batch.commit();
+      if (!isGroup) console.log(`[KO] ${fx.id} ${NAME_BY_CODE[aCode]} ${scoreA}-${scoreB} ${NAME_BY_CODE[bCode]} | winner=${realWinner} finish=${actualFinish} | preds=${preds.size} touched=${touched} sumDelta=${sumDelta} | predFinishes=${JSON.stringify(finCounts)}`);
       if (!alreadyFinished) { wrote++; scoredNow.push(`${NAME_BY_CODE[aCode]} ${scoreA}-${scoreB} ${NAME_BY_CODE[bCode]}`); }
     }
   }
