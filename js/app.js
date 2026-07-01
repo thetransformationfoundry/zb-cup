@@ -754,7 +754,7 @@
       </div>
       <div class="match-teams">
         ${teamSide(f.teamA, mineA)}
-        <div class="vs">${finished ? `<b style="font-size:18px;color:var(--ink)">${f.result.scoreA} – ${f.result.scoreB}</b>` : "vs"}</div>
+        <div class="vs">${finished ? `<b style="font-size:18px;color:var(--ink)">${f.result.scoreA} – ${f.result.scoreB}</b>${f.result.pens ? `<div style="font-size:10px;font-weight:600" class="muted">pens ${f.result.pens.a}–${f.result.pens.b}</div>` : ""}` : "vs"}</div>
         ${teamSide(f.teamB, mineB)}
       </div>
       <div class="pred-area"></div>
@@ -806,7 +806,7 @@
                 ${stateIco}
                 <div>
                   <div style="font-weight:700;font-size:14px">${esc(headline)}</div>
-                  <div class="muted" style="font-size:13px;margin-top:4px">Result <b style="color:var(--ink)">${r.scoreA}–${r.scoreB}</b>${finishShown ? ` <span style="font-size:12px">(${FIN_LABEL[r.finish] || r.finish})</span>` : ""} · your pick <b style="color:var(--ink)">${pred.scoreA}–${pred.scoreB}</b></div>
+                  <div class="muted" style="font-size:13px;margin-top:4px">Result <b style="color:var(--ink)">${r.scoreA}–${r.scoreB}</b>${finishShown ? ` <span style="font-size:12px">(${r.finish === "penalties" && r.pens ? "penalties " + r.pens.a + "–" + r.pens.b : (FIN_LABEL[r.finish] || r.finish)})</span>` : ""} · your pick <b style="color:var(--ink)">${pred.scoreA}–${pred.scoreB}</b></div>
                   <div class="row" style="gap:14px;margin-top:7px;font-size:12px;flex-wrap:wrap">
                     <span class="row" style="gap:5px">${tick(winOk)}<span class="muted">${isKnockout ? "Through" : "Winner"} (5)</span></span>
                     <span class="row" style="gap:5px">${tick(scoreOk)}<span class="muted">Exact (5)</span></span>
