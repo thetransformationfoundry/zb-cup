@@ -116,13 +116,22 @@ async function syncScores(apiKey, trigger) {
       // Group games: score once, then leave alone.
       if (isGroup && alreadyFinished) { skipped++; continue; }
 
-      let scoreA, scoreB, realWinner, aCode, bCode;
+      let scoreA, scoreB, realWinner, aCode, bCode, koPens = null;
       if (isGroup) {
         if (fx.a === homeCode) { scoreA = ft.home; scoreB = ft.away; } else { scoreA = ft.away; scoreB = ft.home; }
         aCode = fx.a; bCode = fx.b;
         realWinner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
       } else {
-        scoreA = ft.home; scoreB = ft.away; aCode = homeCode; bCode = awayCode;
+        // knockout: score the GOALS (regulation + extra time), NOT the penalty shootout.
+        // football-data's fullTime bakes the shootout in for pens, so use regularTime + extraTime.
+        let hg = ft.home, ag = ft.away;
+        if (m.score.duration === "PENALTY_SHOOTOUT") {
+          const rt = m.score.regularTime || {}, et = m.score.extraTime || {}, pk = m.score.penalties || {};
+          hg = (rt.home || 0) + (et.home || 0);
+          ag = (rt.away || 0) + (et.away || 0);
+          koPens = { a: (pk.home != null ? pk.home : null), b: (pk.away != null ? pk.away : null) };
+        }
+        scoreA = hg; scoreB = ag; aCode = homeCode; bCode = awayCode;
         const w = m.score && m.score.winner;
         realWinner = w === "HOME_TEAM" ? "A" : w === "AWAY_TEAM" ? "B" : (scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw");
       }
@@ -132,23 +141,21 @@ async function syncScores(apiKey, trigger) {
         const dur = m.score && m.score.duration;
         actualFinish = dur === "PENALTY_SHOOTOUT" ? "penalties" : dur === "EXTRA_TIME" ? "extratime" : "normal";
       }
-      const resultDoc = isGroup ? { scoreA, scoreB } : { scoreA, scoreB, winner: realWinner, finish: actualFinish };
+      const resultDoc = isGroup ? { scoreA, scoreB }
+        : (koPens ? { scoreA, scoreB, winner: realWinner, finish: actualFinish, pens: koPens }
+                  : { scoreA, scoreB, winner: realWinner, finish: actualFinish });
       await metaRef.set({ status: "finished", result: resultDoc }, { merge: true });
 
       const preds = await db.collection("predictions").where("fixtureId", "==", fx.id).get();
       const batch = db.batch();
-      let touched = 0, sumDelta = 0;
-      const finCounts = {};
-      if (!isGroup) console.log(`[KO-RES] ${fx.id} resultBefore=${JSON.stringify(cur.result || {})} computed={score:${scoreA}-${scoreB},winner:${realWinner},finish:${actualFinish}} apiDuration=${m.score && m.score.duration}`);
+      let touched = 0;
       preds.forEach(d => {
         const p = d.data();
-        if (!isGroup) finCounts[p.finish || "(none)"] = (finCounts[p.finish || "(none)"] || 0) + 1;
         // correct points for this prediction
         let correct = 0;
         if (p.winner === realWinner) correct += 5;
         if (p.scoreA === scoreA && p.scoreB === scoreB) correct += 5;
         if (!isGroup && actualFinish && p.finish === actualFinish) correct += 5;   // knockout finish bonus
-        if (!isGroup) console.log(`[KO-PRED] ${fx.id} ${p.uid} w=${p.winner} fin=${p.finish} ${p.scoreA}-${p.scoreB} pa=${p.pointsAwarded} correct=${correct}`);
 
         if (isGroup) {
           // group: award once (pointsAwarded was null)
@@ -162,13 +169,12 @@ async function syncScores(apiKey, trigger) {
           const delta = correct - old;
           if (p.pointsAwarded == null || delta !== 0) {
             batch.update(d.ref, { pointsAwarded: correct });
-            if (delta !== 0) { batch.update(db.collection("users").doc(p.uid), { points: FieldValue.increment(delta), footballPoints: FieldValue.increment(delta) }); sumDelta += delta; }
+            if (delta !== 0) batch.update(db.collection("users").doc(p.uid), { points: FieldValue.increment(delta), footballPoints: FieldValue.increment(delta) });
             touched++;
           }
         }
       });
       if (touched) await batch.commit();
-      if (!isGroup) console.log(`[KO] ${fx.id} ${NAME_BY_CODE[aCode]} ${scoreA}-${scoreB} ${NAME_BY_CODE[bCode]} | winner=${realWinner} finish=${actualFinish} | preds=${preds.size} touched=${touched} sumDelta=${sumDelta} | predFinishes=${JSON.stringify(finCounts)}`);
       if (!alreadyFinished) { wrote++; scoredNow.push(`${NAME_BY_CODE[aCode]} ${scoreA}-${scoreB} ${NAME_BY_CODE[bCode]}`); }
     }
   }
