@@ -303,11 +303,25 @@ async function runKnockouts() {
   console.log("");
 }
 
+/* ---- mode: --ko-raw — dump the full football-data score object for finished knockout matches ---- */
+async function runKoRaw() {
+  const matches = ((await api("/competitions/WC/matches")).matches || [])
+    .filter(m => m.stage && m.stage !== "GROUP_STAGE" && m.status === "FINISHED")
+    .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
+  console.log(`\n${matches.length} finished knockout match(es) — raw score objects:\n`);
+  matches.forEach(m => {
+    console.log(`${(m.homeTeam && m.homeTeam.name) || "?"} vs ${(m.awayTeam && m.awayTeam.name) || "?"}  [${m.stage}]`);
+    console.log("  score = " + JSON.stringify(m.score));
+    console.log("");
+  });
+}
+
 /* ---- entry ---- */
 const argv = process.argv.slice(2);
 (async () => {
   if (argv.includes("--teams")) return runTeams();
   if (argv.includes("--inspect")) return runInspect();
+  if (argv.includes("--ko-raw")) return runKoRaw();
   if (argv.includes("--knockouts")) return runKnockouts();
   if (argv.includes("--write")) return runWrite();
   return runDryRun(argv.includes("--demo"));
